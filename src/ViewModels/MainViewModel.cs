@@ -295,10 +295,18 @@ public class MainViewModel : INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-public class MonitorItem(int index, Screen screen)
+public class MonitorItem
 {
-    public int Index { get; } = index;
-    public Screen Screen { get; } = screen;
-    public string DisplayName => $"Monitor {Index + 1}{(screen.Primary ? " (Primary)" : "")}  {screen.Bounds.Width}×{screen.Bounds.Height}";
+    public int Index { get; }
+    public Screen Screen { get; }
+    public string DisplayName { get; }
+
+    public MonitorItem(int index, Screen screen)
+    {
+        Index = index;
+        Screen = screen;
+        DisplayName = $"Monitor {index + 1}{(screen.Primary ? " (Primary)" : "")}  {screen.Bounds.Width}×{screen.Bounds.Height}";
+    }
+
     public override string ToString() => DisplayName;
 }
