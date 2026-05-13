@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using RTMPProjector.Services;
@@ -18,6 +19,17 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Write crash.log next to the exe for any unhandled exception
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+            WriteCrashLog(ex.ExceptionObject?.ToString() ?? "Unknown error");
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            WriteCrashLog(ex.Exception.ToString());
+            ex.Handled = true;
+            MessageBox.Show($"Unexpected error:\n\n{ex.Exception.Message}\n\nDetails written to crash.log",
+                "RTMP Projector", MessageBoxButton.OK, MessageBoxImage.Error);
+        };
 
         // Initialize services
         _settingsService = new SettingsService();
@@ -156,5 +168,16 @@ public partial class App : Application
     {
         _trayIcon?.Dispose();
         base.OnExit(e);
+    }
+
+    private static void WriteCrashLog(string text)
+    {
+        try
+        {
+            var path = Path.Combine(
+                AppContext.BaseDirectory, "crash.log");
+            File.WriteAllText(path, $"[{DateTime.Now:u}]\n{text}\n");
+        }
+        catch { /* nowhere left to report */ }
     }
 }

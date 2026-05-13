@@ -8,6 +8,6 @@ public class AppSettings
     public int ProjectionMonitorIndex { get; set; } = 1;
     public bool AutoProjectOnConnect { get; set; } = true;
     public string RecordingPath { get; set; } = "";
-    public bool StartMinimized { get; set; } = true;
+    public bool StartMinimized { get; set; } = false;
     public bool AutoStartServer { get; set; } = false;
 }
