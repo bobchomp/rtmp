@@ -1,27 +1,36 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using RTMPProjector.Models;
 
 namespace RTMPProjector.Services;
 
 public class MediaMtxService : IAsyncDisposable
 {
-    private const string MtxVersion = "v1.9.1";
+    private const string MtxApiUrl  = "https://api.github.com/repos/bluenviron/mediamtx/releases/latest";
     private const string MtxExeName = "mediamtx.exe";
-    private const string MtxDownloadUrl =
-        $"https://github.com/bluenviron/mediamtx/releases/download/{MtxVersion}/mediamtx_{MtxVersion}_windows_amd64.zip";
 
     private static readonly string AppDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RTMPProjector");
 
-    private static readonly string MtxExePath = Path.Combine(AppDir, MtxExeName);
+    private static readonly string MtxExePath    = Path.Combine(AppDir, MtxExeName);
     private static readonly string MtxConfigPath = Path.Combine(AppDir, "mediamtx.yml");
-    private static readonly string MtxLogPath = Path.Combine(AppDir, "mediamtx.log");
+    private static readonly string MtxLogPath    = Path.Combine(AppDir, "mediamtx.log");
 
     private Process? _process;
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http;
+
+    public MediaMtxService()
+    {
+        _http = new HttpClient();
+        // GitHub API requires a User-Agent header
+        _http.DefaultRequestHeaders.UserAgent.Add(
+            new ProductInfoHeaderValue("RTMPProjector", "1.0"));
+        _http.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+    }
 
     public bool IsRunning => _process is { HasExited: false };
 
@@ -32,30 +41,68 @@ public class MediaMtxService : IAsyncDisposable
         if (File.Exists(MtxExePath))
             return true;
 
-        progress?.Report("Downloading MediaMTX server binary...");
         Directory.CreateDirectory(AppDir);
 
         try
         {
+            // Resolve the latest release URL dynamically via the GitHub API
+            progress?.Report("Looking up latest MediaMTX release...");
+            var downloadUrl = await ResolveDownloadUrlAsync();
+            progress?.Report($"Downloading MediaMTX from GitHub...");
+
             var zipPath = Path.Combine(AppDir, "mediamtx.zip");
-            using var response = await _http.GetAsync(MtxDownloadUrl, HttpCompletionOption.ResponseHeadersRead);
+
+            // Stream the download so large files don't sit in memory
+            using var response = await _http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
-            await using var fs = File.Create(zipPath);
-            await response.Content.CopyToAsync(fs);
+            await using (var fs = File.Create(zipPath))
+                await response.Content.CopyToAsync(fs);
 
             progress?.Report("Extracting MediaMTX...");
             System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, AppDir, overwriteFiles: true);
             File.Delete(zipPath);
 
+            if (!File.Exists(MtxExePath))
+                throw new FileNotFoundException(
+                    $"mediamtx.exe not found after extraction. " +
+                    $"Check {AppDir} — the zip may use a different folder layout.");
+
             progress?.Report("MediaMTX ready.");
-            return File.Exists(MtxExePath);
+            return true;
         }
         catch (Exception ex)
         {
-            progress?.Report($"Download failed: {ex.Message}");
+            var msg = $"MediaMTX download failed: {ex.Message}";
+            progress?.Report(msg);
+            LogMessage?.Invoke(msg);
             return false;
         }
+    }
+
+    private async Task<string> ResolveDownloadUrlAsync()
+    {
+        var json = await _http.GetStringAsync(MtxApiUrl);
+        using var doc = JsonDocument.Parse(json);
+
+        if (!doc.RootElement.TryGetProperty("assets", out var assets))
+            throw new InvalidOperationException("GitHub API response missing 'assets' field.");
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            var name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            // Match the windows amd64 zip, e.g. mediamtx_v1.9.1_windows_amd64.zip
+            if (name.Contains("windows_amd64", StringComparison.OrdinalIgnoreCase)
+                && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                return asset.GetProperty("browser_download_url").GetString()
+                    ?? throw new InvalidOperationException("Asset has no download URL.");
+            }
+        }
+
+        throw new InvalidOperationException(
+            "No Windows AMD64 zip found in the latest MediaMTX release. " +
+            "Check https://github.com/bluenviron/mediamtx/releases/latest manually.");
     }
 
     public void WriteConfig(AppSettings settings)

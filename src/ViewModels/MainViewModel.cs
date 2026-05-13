@@ -192,11 +192,12 @@ public class MainViewModel : INotifyPropertyChanged
         BusyText = "Starting server...";
         try
         {
+            // StatusMessage is updated live during download via the progress callback
             var progress = new Progress<string>(msg => StatusMessage = msg);
             bool ready = await _mediaMtx.EnsureBinaryAsync(progress);
             if (!ready)
             {
-                StatusMessage = "Failed to obtain MediaMTX binary. Check your internet connection.";
+                // StatusMessage already contains the real error from EnsureBinaryAsync
                 return;
             }
 
