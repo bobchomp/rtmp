@@ -351,6 +351,7 @@
             </TabItem>
 
             <!-- ─────────── SERVER TAB ─────────── -->
+
             <TabItem Header="Server">
                 <ScrollViewer Margin="20" VerticalScrollBarVisibility="Auto">
                     <StackPanel MaxWidth="520">
@@ -395,8 +396,12 @@
                             </StackPanel>
                         </Border>
 
-                        <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
-                                Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
+                                    Command="{Binding SaveSettingsCommand}"/>
+                            <Button Style="{StaticResource GhostBtn}" Content="Check for Updates"
+                                    Margin="12,0,0,0" Click="CheckForUpdates_Click"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
