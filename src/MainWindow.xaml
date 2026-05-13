@@ -224,20 +224,41 @@
                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
                                 <TextBlock Text="Stream Key (auto-generated)" Style="{StaticResource FieldLabel}"/>
-                                <Grid Margin="0,0,0,12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
-                                             FontFamily="Consolas" FontSize="12"
-                                             IsReadOnly="True" Background="{StaticResource BgDeep}"/>
-                                    <Button Grid.Column="1" Style="{StaticResource GhostBtn}"
-                                            Content="Copy URL" Margin="8,0,0,0"
-                                            Command="{Binding DataContext.CopyRtmpUrlCommand,
-                                                RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"/>
-                                </Grid>
+                                <TextBox Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
+                                         FontFamily="Consolas" FontSize="12"
+                                         IsReadOnly="True" Background="{StaticResource BgDeep}"
+                                         Margin="0,0,0,12"/>
+
+                                <TextBlock Text="RTMP URL — give this to your encoder"
+                                           Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
+                                <Border Background="{StaticResource BgDeep}" CornerRadius="5"
+                                        BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                                        Padding="10,8" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock FontFamily="Consolas" FontSize="13"
+                                                   Foreground="{StaticResource Accent}"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="rtmp://{0}:{1}/live/{2}">
+                                                    <Binding Path="DataContext.LocalIpAddress"
+                                                             RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    <Binding Path="DataContext.Settings.RtmpPort"
+                                                             RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    <Binding Path="Key"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                        <Button Grid.Column="1" Style="{StaticResource GhostBtn}"
+                                                Content="Copy" Margin="12,0,0,0"
+                                                Command="{Binding DataContext.CopyRtmpUrlCommand,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </Border>
 
                                 <Separator/>
 
