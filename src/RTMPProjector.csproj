@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>RTMPProjector</RootNamespace>
+    <AssemblyName>RTMPProjector</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\tray.ico</ApplicationIcon>
+    <AssemblyTitle>RTMP Projector</AssemblyTitle>
+    <AssemblyDescription>RTMP server with fullscreen projection</AssemblyDescription>
+    <Company>RTMPProjector</Company>
+    <Version>1.0.0</Version>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- VLC for video rendering -->
+    <PackageReference Include="LibVLCSharp" Version="3.9.0" />
+    <PackageReference Include="LibVLCSharp.WPF" Version="3.9.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" />
+
+    <!-- System tray icon support -->
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+
+    <!-- JSON settings -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Placeholder icon — replace with your own .ico before building -->
+    <Resource Include="Assets\tray.ico" Condition="Exists('Assets\tray.ico')" />
+  </ItemGroup>
+
+</Project>
