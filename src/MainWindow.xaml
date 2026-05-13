@@ -73,7 +73,7 @@
                 </StackPanel>
 
                 <!-- Server toggle + minimize -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource BaseBtn}"
                             Command="{Binding ToggleServerCommand}"
                             IsEnabled="{Binding IsBusy, Converter={x:Static vm:NegateBoolConverter.Instance}}">
@@ -93,7 +93,7 @@
                         </Button.Content>
                     </Button>
                     <Button Style="{StaticResource GhostBtn}" Content="Minimise to Tray"
-                            Click="MinimiseToTray_Click"/>
+                            Margin="8,0,0,0" Click="MinimiseToTray_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -102,10 +102,10 @@
         <Grid Grid.Row="1" Panel.ZIndex="10"
               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisConverter}}">
             <Rectangle Fill="{StaticResource BgDeep}" Opacity="0.7"/>
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="{Binding BusyText}" Foreground="{StaticResource TextPrim}"
                            FontSize="16" HorizontalAlignment="Center"/>
-                <ProgressBar IsIndeterminate="True" Width="200" Height="6"/>
+                <ProgressBar IsIndeterminate="True" Width="200" Height="6" Margin="0,12,0,0"/>
             </StackPanel>
         </Grid>
 
@@ -175,11 +175,11 @@
                             </Grid>
                         </Border>
 
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <StackPanel Grid.Row="1" Orientation="Horizontal">
                             <Button Style="{StaticResource BaseBtn}" Content="+ Add Key"
                                     Command="{Binding AddStreamKeyCommand}" HorizontalAlignment="Stretch"
                                     Width="118"/>
-                            <Button Style="{StaticResource DangerBtn}" Content="Remove"
+                            <Button Style="{StaticResource DangerBtn}" Content="Remove" Margin="8,0,0,0"
                                     Command="{Binding RemoveStreamKeyCommand}"
                                     CommandParameter="{Binding SelectedStreamKey}"
                                     Width="118"/>
