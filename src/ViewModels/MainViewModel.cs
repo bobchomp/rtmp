@@ -1,7 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
-using System.Windows;
 using System.Windows.Forms;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
@@ -46,6 +47,24 @@ public class MainViewModel : INotifyPropertyChanged
         get => _busyText;
         set { _busyText = value; OnPropertyChanged(); }
     }
+
+    // ── Local IP ─────────────────────────────────────────────────────────────
+
+    public string LocalIpAddress { get; } = ResolveLocalIp();
+
+    private static string ResolveLocalIp()
+    {
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
+            socket.Connect("8.8.8.8", 65530);
+            return (socket.LocalEndPoint as IPEndPoint)?.Address.ToString() ?? "127.0.0.1";
+        }
+        catch { return "127.0.0.1"; }
+    }
+
+    public string GetFullRtmpUrl(StreamKey key) =>
+        $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
     // ── Settings pass-throughs ────────────────────────────────────────────────
 
@@ -239,7 +258,7 @@ public class MainViewModel : INotifyPropertyChanged
     private void CopyRtmpUrl(StreamKey? key)
     {
         if (key == null) return;
-        var url = $"rtmp://YOUR-SERVER-IP:{Settings.RtmpPort}/{key.RtmpPath}";
+        var url = GetFullRtmpUrl(key);
         System.Windows.Clipboard.SetText(url);
         StatusMessage = $"Copied: {url}";
     }
