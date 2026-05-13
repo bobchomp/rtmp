@@ -1,0 +1,77 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers on v1.0.0, v1.2.3, etc.
+  workflow_dispatch:  # also allows manual runs from the Actions tab
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish (self-contained, win-x64)
+        run: |
+          dotnet publish src/RTMPProjector.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.tag }} `
+            -o publish/
+
+      - name: Zip release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish/* -DestinationPath RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: RTMP Projector ${{ steps.version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
+          body: |
+            ## RTMP Projector ${{ steps.version.outputs.tag }}
+
+            ### Installation
+            1. Download the zip below and extract it anywhere
+            2. Run `RTMPProjector.exe`
+            3. On first launch, MediaMTX (~10 MB) is downloaded automatically
+
+            ### Requirements
+            - Windows 10 / 11 x64
+            - No separate .NET install needed (self-contained)
+            - FFmpeg in PATH only needed for the **Restream** feature
+
+            See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup instructions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
