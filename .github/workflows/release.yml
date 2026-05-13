@@ -3,16 +3,16 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'          # triggers on v1.0.0, v1.2.3, etc.
-  workflow_dispatch:  # also allows manual runs from the Actions tab
-
-permissions:
-  contents: write    # required to create releases and upload assets
+      - 'v*'
+  workflow_dispatch:
     inputs:
       version:
         description: 'Release version (e.g. v1.0.0)'
         required: true
         default: 'v1.0.0'
+
+permissions:
+  contents: write
 
 jobs:
   build:
