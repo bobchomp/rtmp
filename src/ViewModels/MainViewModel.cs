@@ -113,13 +113,13 @@ public class MainViewModel : INotifyPropertyChanged
         BrowseRecordingPathCommand = new RelayCommand(_ => BrowseRecordingPath());
         SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
 
-        _monitor.StreamStarted += key => Application.Current.Dispatcher.Invoke(() =>
+        _monitor.StreamStarted += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             RefreshKeyActiveState();
             StreamBecameActive?.Invoke(key);
         });
 
-        _monitor.StreamStopped += key => Application.Current.Dispatcher.Invoke(() =>
+        _monitor.StreamStopped += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             RefreshKeyActiveState();
             StreamBecameInactive?.Invoke(key);
