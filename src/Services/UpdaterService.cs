@@ -163,14 +163,16 @@ public class UpdaterService
         var appDir  = Path.GetDirectoryName(appExe) ?? AppContext.BaseDirectory;
         var script  = Path.Combine(Path.GetTempPath(), "rtmprojector_update.ps1");
 
-        File.WriteAllText(script, $"""
-            $pid = {Environment.ProcessId}
-            $zip = '{zipPath.Replace("'", "''")}'
-            $dir = '{appDir.Replace("'", "''")}'
-            $exe = '{appExe.Replace("'", "''")}'
+        // $$""" lets { and } be literal (safe for PowerShell blocks);
+        // C# interpolations use {{ expr }} syntax.
+        File.WriteAllText(script, $$"""
+            $pid = {{Environment.ProcessId}}
+            $zip = '{{zipPath.Replace("'", "''")}}'
+            $dir = '{{appDir.Replace("'", "''")}}'
+            $exe = '{{appExe.Replace("'", "''")}}'
 
             # Wait for the app to close
-            try {{ Wait-Process -Id $pid -Timeout 10 -ErrorAction SilentlyContinue }} catch {{}}
+            try { Wait-Process -Id $pid -Timeout 10 -ErrorAction SilentlyContinue } catch {}
             Start-Sleep -Seconds 1
 
             # Extract zip, overwriting existing files
@@ -178,7 +180,7 @@ public class UpdaterService
             [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dir, $true)
 
             # Restart
-            if (Test-Path $exe) {{ Start-Process $exe }}
+            if (Test-Path $exe) { Start-Process $exe }
 
             # Clean up script
             Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
