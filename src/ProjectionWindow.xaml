@@ -1,0 +1,91 @@
+<Window x:Class="RTMPProjector.ProjectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        Title="RTMP Projector — Live"
+        Background="Black"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        AllowsTransparency="False"
+        Cursor="None"
+        KeyDown="Window_KeyDown"
+        MouseMove="Window_MouseMove">
+
+    <Grid Background="Black">
+
+        <!-- Video surface -->
+        <vlc:VideoView x:Name="VideoView" Background="Black"/>
+
+        <!-- HUD overlay — fades in on mouse move, out after 3 s of inactivity -->
+        <Grid x:Name="Hud" VerticalAlignment="Top" Opacity="0">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#CC000000" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Grid.Triggers>
+                <!-- Fade-in on load / mouse activity -->
+                <EventTrigger RoutedEvent="Grid.Loaded">
+                    <BeginStoryboard x:Name="FadeInSB">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="Hud"
+                                             Storyboard.TargetProperty="Opacity"
+                                             To="1" Duration="0:0:0.3"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
+
+            <StackPanel Orientation="Horizontal" Margin="20,16" VerticalAlignment="Top">
+                <!-- Stream name -->
+                <Border Background="#AA1a1d27" CornerRadius="6" Padding="12,6">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Fill="#2ecc71" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StreamNameLabel" Text="LIVE" Foreground="White"
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Buttons -->
+                <Button x:Name="StopBtn" Margin="12,0,0,0" Padding="12,6"
+                        Background="#AA1a1d27" Foreground="White" BorderThickness="0"
+                        Cursor="Arrow" Click="StopBtn_Click"
+                        Content="■  Stop Projection"
+                        FontSize="13">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="6"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#CC333655"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
+
+            <!-- Keyboard hint -->
+            <TextBlock Text="ESC — close   ·   F — toggle fullscreen"
+                       Foreground="#99FFFFFF" FontSize="11"
+                       HorizontalAlignment="Right" VerticalAlignment="Top"
+                       Margin="0,22,20,0"/>
+        </Grid>
+
+        <!-- "Waiting for stream" placeholder shown when not yet playing -->
+        <StackPanel x:Name="WaitingPanel" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="Visible">
+            <TextBlock Text="Waiting for stream…" Foreground="#666" FontSize="22"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="WaitingUrlLabel" Foreground="#444" FontSize="13"
+                       FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
+
+    </Grid>
+</Window>

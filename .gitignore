@@ -1,0 +1,24 @@
+## .NET / Visual Studio
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+*.userprefs
+*.pidb
+*.log
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## App data (settings, downloads)
+src/Assets/mediamtx.exe
