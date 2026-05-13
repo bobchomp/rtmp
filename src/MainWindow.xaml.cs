@@ -27,4 +27,7 @@ public partial class MainWindow : Window
     }
 
     private void MinimiseToTray_Click(object sender, RoutedEventArgs e) => Hide();
+
+    private void CheckForUpdates_Click(object sender, RoutedEventArgs e)
+        => (Application.Current as App)?.ManualCheckForUpdates();
 }

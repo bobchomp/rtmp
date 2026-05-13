@@ -1,6 +1,8 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
+using RTMPProjector.Models;
 using RTMPProjector.Services;
 using RTMPProjector.ViewModels;
 
@@ -16,11 +18,17 @@ public partial class App : Application
     private MainWindow? _mainWindow;
     private ProjectionWindow? _projectionWindow;
 
+    // ── Updater state (mirrors main.js) ───────────────────────────────────
+    private UpdaterService? _updater;
+    private UpdateWindow? _updateWindow;
+    private UpdateInfo? _pendingUpdateInfo;
+    private UpdateStatus _updateStatus = UpdateStatus.Idle;
+    private System.Threading.Timer? _updateTimer;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        // Write crash.log next to the exe for any unhandled exception
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             WriteCrashLog(ex.ExceptionObject?.ToString() ?? "Unknown error");
         DispatcherUnhandledException += (_, ex) =>
@@ -31,7 +39,6 @@ public partial class App : Application
                 "RTMP Projector", MessageBoxButton.OK, MessageBoxImage.Error);
         };
 
-        // Initialize services
         _settingsService = new SettingsService();
         _settingsService.Load();
 
@@ -39,71 +46,171 @@ public partial class App : Application
         _monitor  = new StreamMonitorService();
 
         _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
-
-        // Wire stream events to projection window
-        _viewModel.StreamBecameActive += OnStreamBecameActive;
+        _viewModel.StreamBecameActive   += OnStreamBecameActive;
         _viewModel.StreamBecameInactive += OnStreamBecameInactive;
 
-        // Build main window (hidden until user opens it)
         _mainWindow = new MainWindow(_viewModel);
 
-        // Build tray icon
+        StartUpdater();
         BuildTrayIcon();
 
         if (_settingsService.Settings.StartMinimized)
-        {
-            // Stay in tray
-        }
-        else
-        {
-            _mainWindow.Show();
-        }
+            return;
 
-        // Auto-start server if configured
+        _mainWindow.Show();
+
         if (_settingsService.Settings.AutoStartServer)
             _ = _viewModel.StartServerAsync();
     }
 
+    // ── Updater (mirrors startUpdater + onUpdateAvailable in main.js) ─────
+
+    private void StartUpdater()
+    {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
+
+        _updater = new UpdaterService(version);
+        _updater.OnUpdateAvailable = info => Dispatcher.Invoke(() => OnUpdateAvailable(info));
+        _updater.OnProgress        = p    => Dispatcher.Invoke(() => _updateWindow?.ShowProgress(p));
+        _updater.OnComplete        = path => Dispatcher.Invoke(() => OnUpdateComplete(path));
+        _updater.OnError           = msg  => Dispatcher.Invoke(() => OnUpdateError(msg));
+
+        // Silent background check on startup, then every 60 minutes
+        _ = _updater.CheckForUpdateAsync(silent: true);
+        _updateTimer = new System.Threading.Timer(
+            _ => Dispatcher.Invoke(() => _ = _updater.CheckForUpdateAsync(silent: true)),
+            null,
+            TimeSpan.FromMinutes(60),
+            TimeSpan.FromMinutes(60));
+    }
+
+    private void OnUpdateAvailable(UpdateInfo? info)
+    {
+        if (info == null) return;  // silent check found nothing — stay quiet
+
+        _pendingUpdateInfo = info;
+        _updateStatus      = UpdateStatus.Available;
+        RebuildTrayMenu();
+        OpenUpdateWindow();
+        _updateWindow!.ShowUpdateInfo(info);
+    }
+
+    private void OnUpdateComplete(string zipPath)
+    {
+        _updateStatus = UpdateStatus.Ready;
+        RebuildTrayMenu();
+        _updateWindow?.ShowDone(zipPath);
+    }
+
+    private void OnUpdateError(string message)
+    {
+        _updateStatus = UpdateStatus.Idle;
+        RebuildTrayMenu();
+        _updateWindow?.ShowError(message);
+    }
+
+    /// <summary>Mirrors manualCheckForUpdates() in main.js.</summary>
+    public void ManualCheckForUpdates()
+    {
+        if (_updater == null) return;
+        OpenUpdateWindow();
+        _updateWindow!.ShowChecking();
+
+        _updater.OnUpdateAvailable = info => Dispatcher.Invoke(() =>
+        {
+            if (info == null)
+            {
+                _updateStatus = UpdateStatus.Idle;
+                _updateWindow?.ShowUpdateInfo(null);  // shows up-to-date screen
+            }
+            else
+            {
+                OnUpdateAvailable(info);
+            }
+        });
+
+        _ = _updater.CheckForUpdateAsync(silent: false);
+    }
+
+    private void OpenUpdateWindow()
+    {
+        if (_updateWindow == null || !_updateWindow.IsLoaded)
+            _updateWindow = new UpdateWindow(_updater!);
+        _updateWindow.Show();
+        _updateWindow.Activate();
+    }
+
+    // ── Tray icon ─────────────────────────────────────────────────────────
+
     private void BuildTrayIcon()
     {
-        _trayIcon = new TaskbarIcon
-        {
-            ToolTipText = "RTMP Projector",
-            // Icon is loaded from the embedded resource if present
-        };
+        _trayIcon = new TaskbarIcon { ToolTipText = "RTMP Projector" };
 
         try
         {
             var iconUri = new Uri("pack://application:,,,/Assets/tray.ico");
-            _trayIcon.Icon = new System.Drawing.Icon(Application.GetResourceStream(iconUri).Stream);
+            _trayIcon.Icon = new System.Drawing.Icon(
+                GetResourceStream(iconUri).Stream);
         }
-        catch { /* icon file optional during dev */ }
+        catch { }
+
+        RebuildTrayMenu();
+        _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    /// <summary>Mirrors rebuildTrayMenu() — called whenever updateStatus changes.</summary>
+    private void RebuildTrayMenu()
+    {
+        if (_trayIcon == null) return;
 
         var menu = new System.Windows.Controls.ContextMenu();
 
-        var openItem = new System.Windows.Controls.MenuItem { Header = "Open Control Panel" };
-        openItem.Click += (_, _) => ShowMainWindow();
+        void Add(string header, Action onClick)
+        {
+            var item = new System.Windows.Controls.MenuItem { Header = header };
+            item.Click += (_, _) => onClick();
+            menu.Items.Add(item);
+        }
+        void AddSep() => menu.Items.Add(new System.Windows.Controls.Separator());
 
-        var startItem = new System.Windows.Controls.MenuItem { Header = "Start Server" };
-        startItem.Click += (_, _) => _ = _viewModel!.StartServerAsync();
+        Add("Open Control Panel", ShowMainWindow);
 
-        var stopItem = new System.Windows.Controls.MenuItem { Header = "Stop Server" };
-        stopItem.Click += (_, _) => _ = _viewModel!.StopServerAsync();
+        // Update badge — mirrors the tray menu update entries in main.js
+        switch (_updateStatus)
+        {
+            case UpdateStatus.Available:
+                AddSep();
+                Add($"⬆  Update Available (v{_pendingUpdateInfo?.Version})", () =>
+                {
+                    OpenUpdateWindow();
+                    _updateWindow!.ShowUpdateInfo(_pendingUpdateInfo);
+                });
+                break;
+            case UpdateStatus.Ready:
+                AddSep();
+                Add("⬆  Update Ready — Install Now", () => _updateWindow?.Show());
+                break;
+            default:
+                AddSep();
+                Add("Check for Updates", ManualCheckForUpdates);
+                break;
+        }
 
-        var sepItem = new System.Windows.Controls.Separator();
-
-        var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit" };
-        exitItem.Click += (_, _) => ExitApplication();
-
-        menu.Items.Add(openItem);
-        menu.Items.Add(startItem);
-        menu.Items.Add(stopItem);
-        menu.Items.Add(sepItem);
-        menu.Items.Add(exitItem);
+        AddSep();
+        Add("Start Server",  () => _ = _viewModel!.StartServerAsync());
+        Add("Stop Server",   () => _ = _viewModel!.StopServerAsync());
+        AddSep();
+        Add("Exit", ExitApplication);
 
         _trayIcon.ContextMenu = menu;
-        _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
+        _trayIcon.ToolTipText = _updateStatus == UpdateStatus.Available
+            ? $"RTMP Projector — Update Available (v{_pendingUpdateInfo?.Version})"
+            : "RTMP Projector";
     }
+
+    // ── Stream projection ─────────────────────────────────────────────────
 
     private void ShowMainWindow()
     {
@@ -113,11 +220,10 @@ public partial class App : Application
         _mainWindow.Activate();
     }
 
-    private void OnStreamBecameActive(Models.StreamKey key)
+    private void OnStreamBecameActive(StreamKey key)
     {
         if (!_settingsService!.Settings.AutoProjectOnConnect) return;
 
-        // Close existing projection window if showing a different stream
         if (_projectionWindow != null && _projectionWindow.CurrentKey?.Key != key.Key)
         {
             _projectionWindow.Close();
@@ -137,16 +243,15 @@ public partial class App : Application
         _trayIcon?.ShowBalloonTip("Stream Live", $"Now projecting: {key.Name}", BalloonIcon.Info);
     }
 
-    private void OnStreamBecameInactive(Models.StreamKey key)
+    private void OnStreamBecameInactive(StreamKey key)
     {
         if (_projectionWindow?.CurrentKey?.Key == key.Key)
-        {
             _projectionWindow.StopPlayback();
-        }
+
         _trayIcon?.ShowBalloonTip("Stream Ended", $"{key.Name} disconnected.", BalloonIcon.Info);
     }
 
-    public void OpenProjectionManually(string rtmpUrl, Models.StreamKey key)
+    public void OpenProjectionManually(string rtmpUrl, StreamKey key)
     {
         _projectionWindow?.Close();
         var monitor = _viewModel!.SelectedMonitor;
@@ -154,12 +259,15 @@ public partial class App : Application
         _projectionWindow.Show();
     }
 
+    // ── Shutdown ──────────────────────────────────────────────────────────
+
     private async void ExitApplication()
     {
+        _updateTimer?.Dispose();
         _projectionWindow?.Close();
         if (_viewModel != null) await _viewModel.StopServerAsync();
-        if (_mediaMtx != null) await _mediaMtx.DisposeAsync();
-        if (_monitor  != null) await _monitor.DisposeAsync();
+        if (_mediaMtx  != null) await _mediaMtx.DisposeAsync();
+        if (_monitor   != null) await _monitor.DisposeAsync();
         _trayIcon?.Dispose();
         Shutdown();
     }
@@ -174,10 +282,12 @@ public partial class App : Application
     {
         try
         {
-            var path = Path.Combine(
-                AppContext.BaseDirectory, "crash.log");
-            File.WriteAllText(path, $"[{DateTime.Now:u}]\n{text}\n");
+            File.WriteAllText(
+                Path.Combine(AppContext.BaseDirectory, "crash.log"),
+                $"[{DateTime.Now:u}]\n{text}\n");
         }
-        catch { /* nowhere left to report */ }
+        catch { }
     }
+
+    private enum UpdateStatus { Idle, Available, Downloading, Ready }
 }
