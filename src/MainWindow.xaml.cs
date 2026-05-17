@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using RTMPProjector.ViewModels;
@@ -13,15 +14,20 @@ public partial class MainWindow : Window
         _vm = vm;
         DataContext = vm;
 
-        // Register converters that are referenced inline in XAML
         Resources["BoolToVisConverter"] = new BooleanToVisibilityConverter();
 
         InitializeComponent();
+
+        // Auto-scroll log to bottom when new entries arrive
+        ((INotifyCollectionChanged)vm.Log).CollectionChanged += (_, _) =>
+        {
+            if (LogList.Items.Count > 0)
+                LogList.ScrollIntoView(LogList.Items[^1]);
+        };
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        // Minimise to tray instead of closing
         e.Cancel = true;
         Hide();
     }
@@ -30,4 +36,7 @@ public partial class MainWindow : Window
 
     private void CheckForUpdates_Click(object sender, RoutedEventArgs e)
         => (Application.Current as App)?.ManualCheckForUpdates();
+
+    private void ClearLog_Click(object sender, RoutedEventArgs e)
+        => _vm.ClearLog();
 }

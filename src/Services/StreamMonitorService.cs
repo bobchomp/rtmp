@@ -15,6 +15,7 @@ public class StreamMonitorService : IAsyncDisposable
 
     public event Action<StreamKey>? StreamStarted;
     public event Action<StreamKey>? StreamStopped;
+    public event Action<string>? LogMessage;
 
     private readonly HashSet<string> _activePaths = [];
 
@@ -57,10 +58,17 @@ public class StreamMonitorService : IAsyncDisposable
                         bool hasPublisher = item.TryGetProperty("source", out var src) &&
                                            src.ValueKind != JsonValueKind.Null;
 
+                        LogMessage?.Invoke(hasPublisher
+                            ? $"[API] LIVE path: {pathName}"
+                            : $"[API] idle path: {pathName}");
+
                         if (hasPublisher)
                             currentPaths.Add(pathName);
                     }
                 }
+
+                if (currentPaths.Count == 0 && _activePaths.Count == 0)
+                    LogMessage?.Invoke("[API] No active publishers.");
 
                 // Fire started events for newly active paths
                 foreach (var path in currentPaths.Except(_activePaths))

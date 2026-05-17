@@ -353,8 +353,14 @@
             <!-- ─────────── SERVER TAB ─────────── -->
 
             <TabItem Header="Server">
-                <ScrollViewer Margin="20" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="520">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Settings area -->
+                    <StackPanel Grid.Row="0" MaxWidth="520" HorizontalAlignment="Left">
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
@@ -384,26 +390,58 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <TextBlock Text="ABOUT MEDIAMTX" Style="{StaticResource SectionLabel}"/>
-                                <TextBlock Foreground="{StaticResource TextMuted}" FontSize="12" TextWrapping="Wrap">
-                                    RTMP Projector uses MediaMTX as its RTMP engine. The binary is downloaded automatically
-                                    on first start from the official GitHub release page. No VLC or FFmpeg installation is
-                                    required for basic receiving and display.<LineBreak/><LineBreak/>
-                                    FFmpeg must be in your PATH if you enable stream forwarding (restream).
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
                                     Command="{Binding SaveSettingsCommand}"/>
                             <Button Style="{StaticResource GhostBtn}" Content="Check for Updates"
                                     Margin="12,0,0,0" Click="CheckForUpdates_Click"/>
                         </StackPanel>
                     </StackPanel>
-                </ScrollViewer>
+
+                    <!-- Diagnostics log -->
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" Margin="0,0,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="12,10,12,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="DIAGNOSTICS LOG" Style="{StaticResource SectionLabel}"
+                                           VerticalAlignment="Center" Margin="0"/>
+                                <Button Grid.Column="1" Style="{StaticResource GhostBtn}" Content="Clear"
+                                        Click="ClearLog_Click" Padding="8,3"/>
+                            </Grid>
+
+                            <ListBox Grid.Row="1" Background="Transparent" BorderThickness="0"
+                                     ItemsSource="{Binding Log}"
+                                     x:Name="LogList"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     VirtualizingPanel.ScrollUnit="Pixel"
+                                     FontFamily="Consolas" FontSize="11"
+                                     Foreground="{StaticResource TextMuted}"
+                                     Padding="12,0,12,8">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                        <Setter Property="Padding" Value="0,1"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{StaticResource TextMuted}"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Grid>
             </TabItem>
 
         </TabControl>

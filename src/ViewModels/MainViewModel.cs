@@ -79,6 +79,19 @@ public class MainViewModel : INotifyPropertyChanged
         set { _selectedStreamKey = value; OnPropertyChanged(); }
     }
 
+    // ── Diagnostics log ──────────────────────────────────────────────────────
+
+    public ObservableCollection<string> Log { get; } = [];
+
+    private void AppendLog(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+        Log.Add(line);
+        if (Log.Count > 500) Log.RemoveAt(0);
+    }
+
+    public void ClearLog() => Log.Clear();
+
     // ── Monitor list ─────────────────────────────────────────────────────────
 
     public ObservableCollection<MonitorItem> Monitors { get; } = [];
@@ -132,10 +145,14 @@ public class MainViewModel : INotifyPropertyChanged
         BrowseRecordingPathCommand = new RelayCommand(_ => BrowseRecordingPath());
         SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
 
+        _mediaMtx.LogMessage += msg => System.Windows.Application.Current.Dispatcher.Invoke(() => AppendLog(msg));
+        _monitor.LogMessage  += msg => System.Windows.Application.Current.Dispatcher.Invoke(() => AppendLog(msg));
+
         _monitor.StreamStarted += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             RefreshKeyActiveState();
             StatusMessage = $"Stream connected: {key.RtmpPath}";
+            AppendLog($"Stream STARTED — path: {key.RtmpPath}  name: {key.Name}");
             StreamBecameActive?.Invoke(key);
         });
 
