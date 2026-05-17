@@ -142,10 +142,8 @@ public class MediaMtxService : IAsyncDisposable
 
     private static string BuildPathsYaml(AppSettings settings)
     {
-        if (settings.StreamKeys.Count == 0)
-            return "  # No stream keys configured";
-
         var lines = new System.Text.StringBuilder();
+
         foreach (var key in settings.StreamKeys)
         {
             lines.AppendLine($"  {key.RtmpPath}:");
@@ -168,6 +166,11 @@ public class MediaMtxService : IAsyncDisposable
                 lines.AppendLine($"    runOnReadyRestart: yes");
             }
         }
+
+        // Catch-all: accept any publisher path that wasn't explicitly listed above.
+        // This means DJI / third-party encoders that append the stream key differently
+        // will still connect and be detected. The path appears in the diagnostics log.
+        lines.AppendLine("  ~^.*$:");
 
         return lines.ToString().TrimEnd();
     }
