@@ -127,7 +127,7 @@ public class MediaMtxService : IAsyncDisposable
 
             rtmp: yes
             rtmpAddress: :{settings.RtmpPort}
-            rtmpEncryption: no
+            rtmpEncryption: "no"
 
             hls: no
             webrtc: no

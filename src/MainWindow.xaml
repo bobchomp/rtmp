@@ -413,8 +413,12 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="DIAGNOSTICS LOG" Style="{StaticResource SectionLabel}"
                                            VerticalAlignment="Center" Margin="0"/>
-                                <Button Grid.Column="1" Style="{StaticResource GhostBtn}" Content="Clear"
-                                        Click="ClearLog_Click" Padding="8,3"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Style="{StaticResource GhostBtn}" Content="Copy All"
+                                            Click="CopyLog_Click" Padding="8,3"/>
+                                    <Button Style="{StaticResource GhostBtn}" Content="Clear"
+                                            Margin="8,0,0,0" Click="ClearLog_Click" Padding="8,3"/>
+                                </StackPanel>
                             </Grid>
 
                             <ListBox Grid.Row="1" Background="Transparent" BorderThickness="0"
