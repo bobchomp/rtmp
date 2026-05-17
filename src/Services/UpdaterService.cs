@@ -43,7 +43,17 @@ public class UpdaterService
     {
         try
         {
-            var json = await _http.GetStringAsync(ApiUrl);
+            using var response = await _http.GetAsync(ApiUrl);
+
+            // 404 = repo has no releases yet — treat as up to date, not an error
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                if (!silent) OnUpdateAvailable?.Invoke(null);
+                return;
+            }
+
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 

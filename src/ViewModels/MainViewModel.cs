@@ -135,12 +135,16 @@ public class MainViewModel : INotifyPropertyChanged
         _monitor.StreamStarted += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             RefreshKeyActiveState();
+            StatusMessage = $"Stream connected: {key.RtmpPath}";
             StreamBecameActive?.Invoke(key);
         });
 
         _monitor.StreamStopped += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             RefreshKeyActiveState();
+            StatusMessage = IsServerRunning
+                ? $"Server running — RTMP port {Settings.RtmpPort}"
+                : "Server stopped.";
             StreamBecameInactive?.Invoke(key);
         });
 
