@@ -78,6 +78,7 @@ public partial class App : Application
         _updater.OnProgress        = p    => Dispatcher.Invoke(() => _updateWindow?.ShowProgress(p));
         _updater.OnComplete        = path => Dispatcher.Invoke(() => OnUpdateComplete(path));
         _updater.OnError           = msg  => Dispatcher.Invoke(() => OnUpdateError(msg));
+        _updater.LogMessage        = msg  => _viewModel?.AddLogEntry(msg);
 
         // Silent background check on startup, then every 60 minutes
         _ = _updater.CheckForUpdateAsync(silent: true);

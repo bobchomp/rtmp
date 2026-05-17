@@ -28,6 +28,9 @@ public class UpdaterService
     public Action<DownloadProgress>? OnProgress;
     public Action<string>? OnComplete;               // destPath (the zip)
     public Action<string>? OnError;
+    public Action<string>? LogMessage;               // routed to diagnostics log
+
+    public string CurrentVersion => _currentVersion;
 
     public UpdaterService(string currentVersion)
     {
@@ -42,6 +45,7 @@ public class UpdaterService
 
     public async Task CheckForUpdateAsync(bool silent)
     {
+        LogMessage?.Invoke($"[Updater] Checking for updates — current: v{_currentVersion}");
         try
         {
             using var response = await _http.GetAsync(ApiUrl);
@@ -49,6 +53,7 @@ public class UpdaterService
             // 404 = repo has no releases yet — treat as up to date, not an error
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
+                LogMessage?.Invoke("[Updater] No releases found on GitHub — up to date.");
                 if (!silent) OnUpdateAvailable?.Invoke(null);
                 return;
             }
@@ -63,9 +68,12 @@ public class UpdaterService
 
             if (!IsNewer(latestVersion, _currentVersion))
             {
+                LogMessage?.Invoke($"[Updater] Latest release: v{latestVersion} — already up to date.");
                 if (!silent) OnUpdateAvailable?.Invoke(null);
                 return;
             }
+
+            LogMessage?.Invoke($"[Updater] Update available: v{latestVersion} (current: v{_currentVersion})");
 
             // Find the Windows zip asset (exclude .blockmap etc.)
             UpdateInfo? info = null;
@@ -94,14 +102,19 @@ public class UpdaterService
             }
 
             if (info == null)
-                // Newer version exists but no matching asset — surface as error so the user
-                // isn't silently told they're up to date when they're not.
-                OnError?.Invoke($"Update v{latestVersion} found but no Windows download asset was located. Check the GitHub releases page manually.");
+            {
+                var msg = $"Update v{latestVersion} found but no Windows download asset was located. Check the GitHub releases page manually.";
+                LogMessage?.Invoke($"[Updater] {msg}");
+                OnError?.Invoke(msg);
+            }
             else
+            {
                 OnUpdateAvailable?.Invoke(info);
+            }
         }
         catch (Exception ex)
         {
+            LogMessage?.Invoke($"[Updater] Check failed: {ex.Message}");
             if (!silent) OnError?.Invoke(ex.Message);
         }
     }

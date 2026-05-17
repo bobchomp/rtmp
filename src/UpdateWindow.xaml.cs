@@ -33,7 +33,7 @@ public partial class UpdateWindow : Window
 
         if (info == null)
         {
-            UpToDateVersion.Text = $"You are running the latest version.";
+            UpToDateVersion.Text = $"You are running the latest version (v{_updater.CurrentVersion}).";
             ShowScreen(ScreenUpToDate);
         }
         else
@@ -112,6 +112,12 @@ public partial class UpdateWindow : Window
     private void BtnRetry_Click(object sender, RoutedEventArgs e)
     {
         ShowScreen(null);
+        _ = _updater.CheckForUpdateAsync(silent: false);
+    }
+
+    private void BtnCheckAgain_Click(object sender, RoutedEventArgs e)
+    {
+        ShowChecking();
         _ = _updater.CheckForUpdateAsync(silent: false);
     }
 

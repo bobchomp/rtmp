@@ -90,6 +90,8 @@ public class MainViewModel : INotifyPropertyChanged
         if (Log.Count > 500) Log.RemoveAt(0);
     }
 
+    public void AddLogEntry(string message) => UIInvoke(() => AppendLog(message));
+
     public void ClearLog() => Log.Clear();
 
     // ── Monitor list ─────────────────────────────────────────────────────────
