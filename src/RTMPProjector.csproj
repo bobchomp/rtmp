@@ -35,4 +35,20 @@
     <Resource Include="Assets\tray.ico" Condition="Exists('Assets\tray.ico')" />
   </ItemGroup>
 
+  <!--
+    VideoLAN.LibVLC.Windows copies VLC native DLLs (libvlc.dll, libvlccore.dll, plugins/)
+    to $(OutDir)libvlc\ via its own MSBuild target. dotnet publish writes to $(PublishDir)
+    which is a different directory — so those DLLs never make it into the published zip.
+    This target runs after Publish and bridges the gap.
+  -->
+  <Target Name="CopyVlcToPublishDir" AfterTargets="Publish">
+    <ItemGroup>
+      <_VlcFiles Include="$(OutDir)libvlc\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_VlcFiles)"
+          DestinationFolder="$(PublishDir)libvlc\%(RecursiveDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(OutDir)libvlc')" />
+  </Target>
+
 </Project>

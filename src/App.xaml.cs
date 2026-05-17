@@ -46,8 +46,10 @@ public partial class App : Application
         _monitor  = new StreamMonitorService();
 
         _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
-        _viewModel.StreamBecameActive   += OnStreamBecameActive;
-        _viewModel.StreamBecameInactive += OnStreamBecameInactive;
+        _viewModel.StreamBecameActive      += OnStreamBecameActive;
+        _viewModel.StreamBecameInactive    += OnStreamBecameInactive;
+        _viewModel.OpenProjectionRequested += key =>
+            OpenProjectionManually(_viewModel.BuildRtmpUrl(key), key);
 
         _mainWindow = new MainWindow(_viewModel);
 
