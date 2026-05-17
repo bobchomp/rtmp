@@ -145,10 +145,10 @@ public class MainViewModel : INotifyPropertyChanged
         BrowseRecordingPathCommand = new RelayCommand(_ => BrowseRecordingPath());
         SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
 
-        _mediaMtx.LogMessage += msg => System.Windows.Application.Current.Dispatcher.Invoke(() => AppendLog(msg));
-        _monitor.LogMessage  += msg => System.Windows.Application.Current.Dispatcher.Invoke(() => AppendLog(msg));
+        _mediaMtx.LogMessage += msg => UIInvoke(() => AppendLog(msg));
+        _monitor.LogMessage  += msg => UIInvoke(() => AppendLog(msg));
 
-        _monitor.StreamStarted += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        _monitor.StreamStarted += key => UIInvoke(() =>
         {
             RefreshKeyActiveState();
             StatusMessage = $"Stream connected: {key.RtmpPath}";
@@ -156,7 +156,7 @@ public class MainViewModel : INotifyPropertyChanged
             StreamBecameActive?.Invoke(key);
         });
 
-        _monitor.StreamStopped += key => System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        _monitor.StreamStopped += key => UIInvoke(() =>
         {
             RefreshKeyActiveState();
             StatusMessage = IsServerRunning
@@ -327,6 +327,10 @@ public class MainViewModel : INotifyPropertyChanged
 
     public string BuildRtmpUrl(StreamKey key) =>
         $"rtmp://localhost:{Settings.RtmpPort}/{key.RtmpPath}";
+
+    // Safe cross-thread UI dispatch: fire-and-forget, no-op if app is shutting down.
+    private static void UIInvoke(Action action)
+        => System.Windows.Application.Current?.Dispatcher.BeginInvoke(action);
 
     // ── INotifyPropertyChanged ─────────────────────────────────────────────────
 
