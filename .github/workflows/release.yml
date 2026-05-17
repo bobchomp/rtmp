@@ -48,6 +48,23 @@ jobs:
             -p:Version=${{ steps.version.outputs.nuget_version }} `
             -o publish/
 
+      - name: Ensure VLC native libs in publish output
+        shell: pwsh
+        run: |
+          # The csproj CopyVlcToPublishDir target should have done this, but verify and
+          # fall back to a manual copy from the build output directory if needed.
+          if (Test-Path "publish\libvlc") {
+            Write-Host "VLC libs already present in publish/"
+          } else {
+            $src = "src\bin\Release\net8.0-windows\win-x64\libvlc"
+            if (Test-Path $src) {
+              Copy-Item -Recurse -Force $src publish\
+              Write-Host "VLC libs copied from $src"
+            } else {
+              Write-Error "VLC native libraries not found — video playback will fail!"
+            }
+          }
+
       - name: Zip release
         shell: pwsh
         run: |

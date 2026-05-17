@@ -260,6 +260,13 @@
                                     </Grid>
                                 </Border>
 
+                                <Button Style="{StaticResource BaseBtn}" Content="▶  Open Projection Window"
+                                        Margin="0,4,0,0"
+                                        Command="{Binding DataContext.OpenProjectionCommand,
+                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Left"/>
+
                                 <Separator/>
 
                                 <TextBlock Text="RECORDING" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
@@ -344,8 +351,13 @@
                             </StackPanel>
                         </Border>
 
-                        <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
-                                Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
+                                    Command="{Binding SaveSettingsCommand}"/>
+                            <Button Style="{StaticResource GhostBtn}" Content="▶  Open Projection Window"
+                                    Margin="12,0,0,0"
+                                    Command="{Binding OpenProjectionCommand}"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

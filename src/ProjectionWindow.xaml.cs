@@ -44,22 +44,33 @@ public partial class ProjectionWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        Core.Initialize();
+        try
+        {
+            Core.Initialize();
 
-        _libVlc ??= new LibVLC(enableDebugLogs: false,
-            "--network-caching=150",
-            "--live-caching=150",
-            "--rtmp-caching=150",
-            "--no-video-title-show");
+            _libVlc ??= new LibVLC(enableDebugLogs: false,
+                "--network-caching=150",
+                "--live-caching=150",
+                "--rtmp-caching=150",
+                "--no-video-title-show");
 
-        _player = new MediaPlayer(_libVlc);
-        VideoView.MediaPlayer = _player;
+            _player = new MediaPlayer(_libVlc);
+            VideoView.MediaPlayer = _player;
 
-        _player.Playing  += (_, _) => Dispatcher.Invoke(() => WaitingPanel.Visibility = Visibility.Collapsed);
-        _player.Stopped  += (_, _) => Dispatcher.Invoke(() => WaitingPanel.Visibility = Visibility.Visible);
-        _player.EndReached += (_, _) => Dispatcher.Invoke(() => WaitingPanel.Visibility = Visibility.Visible);
+            _player.Playing    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Collapsed);
+            _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
+            _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
 
-        BeginPlay();
+            if (!string.IsNullOrEmpty(_rtmpUrl))
+                BeginPlay();
+        }
+        catch (Exception ex)
+        {
+            WaitingUrlLabel.Text =
+                $"Video engine failed to load — libvlc DLLs are missing.\n\n" +
+                $"Re-download the latest release; the libvlc folder must be next to RTMPProjector.exe.\n\n" +
+                $"Detail: {ex.Message}";
+        }
     }
 
     private void BeginPlay()

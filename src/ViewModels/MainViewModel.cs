@@ -120,11 +120,13 @@ public class MainViewModel : INotifyPropertyChanged
     public RelayCommand CopyRtmpUrlCommand { get; }
     public RelayCommand BrowseRecordingPathCommand { get; }
     public RelayCommand SaveSettingsCommand { get; }
+    public RelayCommand OpenProjectionCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────────
 
     public event Action<StreamKey>? StreamBecameActive;
     public event Action<StreamKey>? StreamBecameInactive;
+    public event Action<StreamKey>? OpenProjectionRequested;
 
     // ── Construction ──────────────────────────────────────────────────────────
 
@@ -144,6 +146,12 @@ public class MainViewModel : INotifyPropertyChanged
             o => (o as StreamKey ?? SelectedStreamKey) != null);
         BrowseRecordingPathCommand = new RelayCommand(_ => BrowseRecordingPath());
         SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+        OpenProjectionCommand = new RelayCommand(
+            o =>
+            {
+                var key = o as StreamKey ?? SelectedStreamKey ?? new StreamKey { Name = "Preview" };
+                OpenProjectionRequested?.Invoke(key);
+            });
 
         _mediaMtx.LogMessage += msg => UIInvoke(() => AppendLog(msg));
         _monitor.LogMessage  += msg => UIInvoke(() => AppendLog(msg));
