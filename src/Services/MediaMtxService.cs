@@ -152,7 +152,8 @@ public class MediaMtxService : IAsyncDisposable
 
             if (key.RecordEnabled && !string.IsNullOrWhiteSpace(settings.RecordingPath))
             {
-                var recPath = Path.Combine(settings.RecordingPath, key.Key, "%Y-%m-%d_%H-%M-%S-%f")
+                // %path is required by MediaMTX and expands to the stream path (e.g. live/abc123)
+                var recPath = Path.Combine(settings.RecordingPath, "%path", "%Y-%m-%d_%H-%M-%S-%f")
                                   .Replace('\\', '/');
                 lines.AppendLine($"    record: yes");
                 lines.AppendLine($"    recordPath: {recPath}");

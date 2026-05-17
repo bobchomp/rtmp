@@ -31,7 +31,8 @@ public class UpdaterService
 
     public UpdaterService(string currentVersion)
     {
-        _currentVersion = currentVersion.TrimStart('v');
+        // Strip leading 'v' and any +build-metadata suffix (e.g. "1.2.5+abc1234")
+        _currentVersion = currentVersion.TrimStart('v').Split('+')[0];
         _http = new HttpClient();
         _http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("RTMPProjector", _currentVersion));
@@ -92,7 +93,12 @@ public class UpdaterService
                 }
             }
 
-            OnUpdateAvailable?.Invoke(info);
+            if (info == null)
+                // Newer version exists but no matching asset — surface as error so the user
+                // isn't silently told they're up to date when they're not.
+                OnError?.Invoke($"Update v{latestVersion} found but no Windows download asset was located. Check the GitHub releases page manually.");
+            else
+                OnUpdateAvailable?.Invoke(info);
         }
         catch (Exception ex)
         {
