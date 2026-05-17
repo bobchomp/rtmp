@@ -65,23 +65,27 @@ public class StreamMonitorService : IAsyncDisposable
                 // Fire started events for newly active paths
                 foreach (var path in currentPaths.Except(_activePaths))
                 {
-                    var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == path);
-                    if (key != null)
-                    {
-                        key.IsActive = true;
-                        StreamStarted?.Invoke(key);
-                    }
+                    // Match against a configured key, or create a synthetic one for
+                    // unrecognised paths (e.g. path format mismatch from the encoder)
+                    var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == path)
+                              ?? new StreamKey
+                              {
+                                  Name         = path,
+                                  Key          = path.Contains('/') ? path[(path.LastIndexOf('/') + 1)..] : path,
+                                  ExplicitPath = path,
+                                  IsActive     = true
+                              };
+                    key.IsActive = true;
+                    StreamStarted?.Invoke(key);
                 }
 
                 // Fire stopped events for paths that went offline
                 foreach (var path in _activePaths.Except(currentPaths))
                 {
                     var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == path);
-                    if (key != null)
-                    {
-                        key.IsActive = false;
-                        StreamStopped?.Invoke(key);
-                    }
+                    if (key != null) key.IsActive = false;
+                    // Always fire — even for synthetic keys the projection window should close
+                    StreamStopped?.Invoke(key ?? new StreamKey { ExplicitPath = path });
                 }
 
                 _activePaths.Clear();

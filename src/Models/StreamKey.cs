@@ -8,8 +8,12 @@ public class StreamKey
     public string Name { get; set; } = "Stream";
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
 
+    /// Set by StreamMonitorService for paths that don't match any configured key.
     [JsonIgnore]
-    public string RtmpPath => $"live/{Key}";
+    public string? ExplicitPath { get; set; }
+
+    [JsonIgnore]
+    public string RtmpPath => ExplicitPath ?? $"live/{Key}";
 
     public bool RecordEnabled { get; set; } = false;
     public bool RestreamEnabled { get; set; } = false;
