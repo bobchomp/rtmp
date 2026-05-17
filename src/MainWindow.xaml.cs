@@ -37,6 +37,12 @@ public partial class MainWindow : Window
     private void CheckForUpdates_Click(object sender, RoutedEventArgs e)
         => (Application.Current as App)?.ManualCheckForUpdates();
 
+    private void CopyLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.Log.Count > 0)
+            Clipboard.SetText(string.Join(Environment.NewLine, _vm.Log));
+    }
+
     private void ClearLog_Click(object sender, RoutedEventArgs e)
         => _vm.ClearLog();
 }
