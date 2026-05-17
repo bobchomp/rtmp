@@ -18,10 +18,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- VLC for video rendering -->
+    <!-- VLC for video rendering. GeneratePathProperty gives us $(PkgVideoLAN_LibVLC_Windows)
+         so we can copy native DLLs directly from the NuGet package cache. -->
     <PackageReference Include="LibVLCSharp" Version="3.9.0" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.9.0" />
-    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" GeneratePathProperty="true" />
 
     <!-- System tray icon support -->
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
@@ -36,19 +37,25 @@
   </ItemGroup>
 
   <!--
-    VideoLAN.LibVLC.Windows copies VLC native DLLs (libvlc.dll, libvlccore.dll, plugins/)
-    to $(OutDir)libvlc\ via its own MSBuild target. dotnet publish writes to $(PublishDir)
-    which is a different directory — so those DLLs never make it into the published zip.
-    This target runs after Publish and bridges the gap.
+    VideoLAN.LibVLC.Windows 3.x ships its targets in build/net20/ and build/net40/,
+    which .NET 8 SDK projects don't pick up automatically. Instead we use the
+    GeneratePathProperty above ($(PkgVideoLAN_LibVLC_Windows)) to get the package
+    folder and copy the win-x64 native files directly after publish.
   -->
   <Target Name="CopyVlcToPublishDir" AfterTargets="Publish">
+    <PropertyGroup>
+      <_VlcNativeRoot>$(PkgVideoLAN_LibVLC_Windows)\runtimes\win\native\libvlc\win-x64</_VlcNativeRoot>
+    </PropertyGroup>
     <ItemGroup>
-      <_VlcFiles Include="$(OutDir)libvlc\**\*" />
+      <_VlcFiles Include="$(_VlcNativeRoot)\**\*" />
     </ItemGroup>
+    <Message Text="Copying VLC native libs from $(_VlcNativeRoot)" Importance="high" />
     <Copy SourceFiles="@(_VlcFiles)"
-          DestinationFolder="$(PublishDir)libvlc\%(RecursiveDir)"
+          DestinationFolder="$(PublishDir)libvlc\win-x64\%(RecursiveDir)"
           SkipUnchangedFiles="true"
-          Condition="Exists('$(OutDir)libvlc')" />
+          Condition="Exists('$(_VlcNativeRoot)')" />
+    <Warning Text="VLC native libs not found at $(_VlcNativeRoot) — video playback will fail in the release build."
+             Condition="!Exists('$(_VlcNativeRoot)')" />
   </Target>
 
 </Project>

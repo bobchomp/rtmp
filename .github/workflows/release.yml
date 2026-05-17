@@ -51,18 +51,44 @@ jobs:
       - name: Ensure VLC native libs in publish output
         shell: pwsh
         run: |
-          # The csproj CopyVlcToPublishDir target should have done this, but verify and
-          # fall back to a manual copy from the build output directory if needed.
-          if (Test-Path "publish\libvlc") {
-            Write-Host "VLC libs already present in publish/"
+          # Belt-and-suspenders: the csproj CopyVlcToPublishDir target uses
+          # $(PkgVideoLAN_LibVLC_Windows) to copy VLC DLLs after publish.
+          # This step verifies the result and falls back to copying directly
+          # from the NuGet package cache if the MSBuild target didn't fire.
+
+          $dest = "publish\libvlc\win-x64"
+
+          if ((Test-Path $dest) -and (Get-ChildItem $dest -Filter "libvlc.dll")) {
+            Write-Host "VLC libs verified in $dest"
           } else {
-            $src = "src\bin\Release\net8.0-windows\win-x64\libvlc"
-            if (Test-Path $src) {
-              Copy-Item -Recurse -Force $src publish\
-              Write-Host "VLC libs copied from $src"
-            } else {
-              Write-Error "VLC native libraries not found — video playback will fail!"
+            Write-Warning "VLC libs missing — falling back to NuGet cache copy"
+
+            # Search the NuGet cache for VideoLAN.LibVLC.Windows
+            $cacheRoots = @(
+              "$env:USERPROFILE\.nuget\packages",
+              "$env:NUGET_PACKAGES"
+            ) | Where-Object { $_ -and (Test-Path $_) }
+
+            $libvlcDll = $null
+            foreach ($root in $cacheRoots) {
+              $libvlcDll = Get-ChildItem "$root\videolan.libvlc.windows" -Recurse `
+                             -Filter "libvlc.dll" -ErrorAction SilentlyContinue |
+                           Where-Object { $_.FullName -match "win-x64" } |
+                           Select-Object -First 1
+              if ($libvlcDll) { break }
             }
+
+            if (-not $libvlcDll) {
+              Write-Error "libvlc.dll not found in any NuGet cache — release will fail at runtime!"
+              exit 1
+            }
+
+            $vlcSrc = $libvlcDll.DirectoryName
+            Write-Host "Found VLC win-x64 DLLs at: $vlcSrc"
+            New-Item -ItemType Directory -Force $dest | Out-Null
+            Copy-Item -Recurse -Force "$vlcSrc\*" "$dest\"
+            Write-Host "Copied. Contents:"
+            Get-ChildItem $dest | Select-Object -ExpandProperty Name | Write-Host
           }
 
       - name: Zip release
