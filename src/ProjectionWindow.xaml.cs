@@ -44,9 +44,11 @@ public partial class ProjectionWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        var vlcDir = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
         try
         {
-            Core.Initialize();
+            // Pass the path explicitly — relying on auto-detection fails in published apps.
+            Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
 
             _libVlc ??= new LibVLC(enableDebugLogs: false,
                 "--network-caching=150",
@@ -66,10 +68,18 @@ public partial class ProjectionWindow : Window
         }
         catch (Exception ex)
         {
-            WaitingUrlLabel.Text =
-                $"Video engine failed to load — libvlc DLLs are missing.\n\n" +
-                $"Re-download the latest release; the libvlc folder must be next to RTMPProjector.exe.\n\n" +
-                $"Detail: {ex.Message}";
+            var hasDll    = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
+            var hasCore   = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
+            var hasPlugin = Directory.Exists(Path.Combine(vlcDir, "plugins"));
+
+            WaitingUrlLabel.Text = hasDll
+                ? $"VLC DLLs found but failed to load — a dependency may be missing " +
+                  $"(try installing the Visual C++ Redistributable 2015-2022 x64 from Microsoft).\n\n" +
+                  $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}  plugins/ {(hasPlugin ? "✓" : "✗")}\n\n" +
+                  $"Detail: {ex.Message}"
+                : $"libvlc DLLs are missing from: {vlcDir}\n\n" +
+                  $"Re-download the latest release and make sure the libvlc folder " +
+                  $"is next to RTMPProjector.exe.\n\nDetail: {ex.Message}";
         }
     }
 
