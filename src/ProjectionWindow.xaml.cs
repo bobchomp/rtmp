@@ -65,7 +65,9 @@ public partial class ProjectionWindow : Window
             _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
 
             if (!string.IsNullOrEmpty(_rtmpUrl))
-                BeginPlay();
+                // Delay until after the first render pass so the VideoView's
+                // internal WindowsFormsHost HWND exists before VLC tries to use it.
+                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, BeginPlay);
         }
         catch (Exception ex)
         {
