@@ -44,7 +44,7 @@
   -->
   <Target Name="CopyVlcToPublishDir" AfterTargets="Publish">
     <PropertyGroup>
-      <_VlcNativeRoot>$(PkgVideoLAN_LibVLC_Windows)\runtimes\win\native\libvlc\win-x64</_VlcNativeRoot>
+      <_VlcNativeRoot>$(PkgVideoLAN_LibVLC_Windows)\runtimes\win-x64\native</_VlcNativeRoot>
     </PropertyGroup>
     <ItemGroup>
       <_VlcFiles Include="$(_VlcNativeRoot)\**\*" />

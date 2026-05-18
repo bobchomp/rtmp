@@ -91,6 +91,31 @@ jobs:
             Get-ChildItem $dest | Select-Object -ExpandProperty Name | Write-Host
           }
 
+      - name: Bundle VC++ runtime DLLs with VLC
+        shell: pwsh
+        run: |
+          # VLC's native DLLs are compiled with MSVC and require the VC++ runtime.
+          # Copy from VS's Redist folder (licensed for redistribution) so users
+          # don't need to install the Visual C++ Redistributable separately.
+          $dest = "publish\libvlc\win-x64"
+          $needed = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+          foreach ($dll in $needed) {
+            if (Test-Path "$dest\$dll") {
+              Write-Host "$dll already present — skipping"
+              continue
+            }
+            $src = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" `
+                     -Recurse -Filter $dll -ErrorAction SilentlyContinue |
+                   Where-Object { $_.FullName -match "\\x64\\" -and $_.FullName -match "CRT" } |
+                   Select-Object -First 1
+            if ($src) {
+              Copy-Item $src.FullName "$dest\$dll" -Force
+              Write-Host "Bundled $dll from $($src.FullName)"
+            } else {
+              Write-Warning "$dll not found in VS Redist — users may need the VC++ Redistributable"
+            }
+          }
+
       - name: Zip release
         shell: pwsh
         run: |
