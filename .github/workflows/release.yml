@@ -51,19 +51,18 @@ jobs:
       - name: Ensure VLC native libs in publish output
         shell: pwsh
         run: |
-          # Belt-and-suspenders: the csproj CopyVlcToPublishDir target uses
-          # $(PkgVideoLAN_LibVLC_Windows) to copy VLC DLLs after publish.
-          # This step verifies the result and falls back to copying directly
-          # from the NuGet package cache if the MSBuild target didn't fire.
+          $dest       = "publish\libvlc\win-x64"
+          $pluginsDir = "$dest\plugins"
+          $pluginCount = if (Test-Path $pluginsDir) { (Get-ChildItem $pluginsDir -Filter "*.dll").Count } else { 0 }
+          $hasLibvlc   = Test-Path "$dest\libvlc.dll"
 
-          $dest = "publish\libvlc\win-x64"
+          Write-Host "Pre-check — libvlc.dll: $hasLibvlc  plugins: $pluginCount DLLs"
 
-          if ((Test-Path $dest) -and (Get-ChildItem $dest -Filter "libvlc.dll")) {
-            Write-Host "VLC libs verified in $dest"
+          if ($hasLibvlc -and $pluginCount -gt 0) {
+            Write-Host "VLC verified — skipping NuGet cache copy"
           } else {
-            Write-Warning "VLC libs missing — falling back to NuGet cache copy"
+            Write-Warning "VLC incomplete (libvlc=$hasLibvlc plugins=$pluginCount) — copying from NuGet cache"
 
-            # Search the NuGet cache for VideoLAN.LibVLC.Windows
             $cacheRoots = @(
               "$env:USERPROFILE\.nuget\packages",
               "$env:NUGET_PACKAGES"
@@ -84,11 +83,16 @@ jobs:
             }
 
             $vlcSrc = $libvlcDll.DirectoryName
-            Write-Host "Found VLC win-x64 DLLs at: $vlcSrc"
+            Write-Host "Copying VLC from: $vlcSrc"
             New-Item -ItemType Directory -Force $dest | Out-Null
             Copy-Item -Recurse -Force "$vlcSrc\*" "$dest\"
-            Write-Host "Copied. Contents:"
-            Get-ChildItem $dest | Select-Object -ExpandProperty Name | Write-Host
+          }
+
+          # Always print the full tree so CI logs show exactly what goes into the zip
+          Write-Host "`nlibvlc\win-x64 tree:"
+          Get-ChildItem $dest -Recurse | ForEach-Object {
+            $rel = $_.FullName.Substring((Resolve-Path $dest).Path.Length + 1)
+            Write-Host "  $rel"
           }
 
       - name: Bundle VC++ runtime DLLs with VLC
