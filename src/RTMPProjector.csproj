@@ -66,7 +66,7 @@
                       Overwrite="true"
                       Condition="'$(_VlcNativeRoot)' == ''" />
 
-    <ItemGroup>
+    <ItemGroup Condition="'$(_VlcNativeRoot)' != ''">
       <_VlcFiles Include="$(_VlcNativeRoot)\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(_VlcFiles)"
