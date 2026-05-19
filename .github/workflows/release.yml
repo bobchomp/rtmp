@@ -54,7 +54,7 @@ jobs:
           $dest       = "publish\libvlc\win-x64"
           $pluginsDir = "$dest\plugins"
           $pluginCount = if (Test-Path $pluginsDir) { (Get-ChildItem $pluginsDir -Filter "*.dll").Count } else { 0 }
-          $hasLibvlc   = Test-Path "$dest\libvlc.dll"
+          $hasLibvlc  = Test-Path "$dest\libvlc.dll"
 
           Write-Host "Pre-check — libvlc.dll: $hasLibvlc  plugins: $pluginCount DLLs"
 
@@ -62,46 +62,80 @@ jobs:
             Write-Host "VLC verified — skipping NuGet cache copy"
           } else {
             Write-Warning "VLC incomplete (libvlc=$hasLibvlc plugins=$pluginCount) — locating source"
-
-            # Strategy 1: read the path written by the MSBuild target
             $vlcSrc = $null
-            $hintFile = "publish\vlc-native-root.txt"
+
+            # ── Strategy 1: MSBuild wrote the package root path to a hint file ─────
+            $hintFile = "publish\vlc-pkg-root.txt"
             if (Test-Path $hintFile) {
-              $hint = (Get-Content $hintFile -Raw).Trim()
-              Write-Host "MSBuild hint: $hint"
-              if ($hint -notmatch "^NOT_FOUND" -and (Test-Path "$hint\libvlc.dll")) {
-                $vlcSrc = $hint
+              $pkgRoot = (Get-Content $hintFile -Raw).Trim()
+              Write-Host "MSBuild hint pkg root: $pkgRoot"
+              if (Test-Path $pkgRoot) {
+                Write-Host "`nVideoLAN.LibVLC.Windows package tree (from hint):"
+                Get-ChildItem $pkgRoot -Recurse -ErrorAction SilentlyContinue |
+                  ForEach-Object { Write-Host "  $($_.FullName.Substring($pkgRoot.Length))" }
+                $dll = Get-ChildItem $pkgRoot -Recurse -Filter "libvlc.dll" `
+                         -ErrorAction SilentlyContinue |
+                       Where-Object { $_.FullName -notmatch "\\x86\\" } |
+                       Select-Object -First 1
+                if ($dll) {
+                  Write-Host "Found via hint: $($dll.FullName)"
+                  $vlcSrc = $dll.DirectoryName
+                }
               }
             }
 
-            # Strategy 2: ask dotnet where the global packages cache is
+            # ── Strategy 2: dotnet nuget locals + recursive search ────────────────
             if (-not $vlcSrc) {
-              $nugetLocal = & dotnet nuget locals global-packages --list 2>&1
-              Write-Host "dotnet nuget locals: $nugetLocal"
-              $nugetRoot  = ($nugetLocal -split "`n" | Where-Object { $_ -match "global-packages:" }) -replace ".*global-packages:\s*", "" | Select-Object -First 1
-              Write-Host "NuGet global packages root: '$nugetRoot'"
+              $lines    = (& dotnet nuget locals global-packages -l 2>&1) -join "`n"
+              Write-Host "dotnet nuget locals: $lines"
+              $nugetRoot = $null
+              if ($lines -match "global-packages:\s*(.+)") { $nugetRoot = $Matches[1].Trim() }
+              Write-Host "NuGet root: '$nugetRoot'"
+
               if ($nugetRoot -and (Test-Path $nugetRoot)) {
-                $pkgDir = Join-Path $nugetRoot "videolan.libvlc.windows"
-                if (Test-Path $pkgDir) {
-                  Write-Host "`nVideoLAN.LibVLC.Windows package tree:"
-                  Get-ChildItem $pkgDir -Recurse | ForEach-Object {
-                    $rel = $_.FullName.Substring((Resolve-Path $pkgDir).Path.Length + 1)
-                    Write-Host "  $rel"
+                # Case-insensitive glob — package dir may be lowercased
+                $pkgDir = Get-ChildItem $nugetRoot -Filter "videolan.libvlc.windows" `
+                            -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($pkgDir) {
+                  Write-Host "`nVideoLAN.LibVLC.Windows package tree (from NuGet):"
+                  Get-ChildItem $pkgDir.FullName -Recurse -ErrorAction SilentlyContinue |
+                    ForEach-Object { Write-Host "  $($_.FullName.Substring($pkgDir.FullName.Length))" }
+                  $dll = Get-ChildItem $pkgDir.FullName -Recurse -Filter "libvlc.dll" `
+                           -ErrorAction SilentlyContinue |
+                         Where-Object { $_.FullName -notmatch "\\x86\\" } |
+                         Select-Object -First 1
+                  if ($dll) {
+                    Write-Host "Found via NuGet cache: $($dll.FullName)"
+                    $vlcSrc = $dll.DirectoryName
+                  } else {
+                    Write-Host "libvlc.dll not found in package tree — tree dumped above"
                   }
+                } else {
+                  Write-Host "videolan.libvlc.windows dir not found under: $nugetRoot"
+                  Write-Host "Packages present: $(Get-ChildItem $nugetRoot | Select-Object -ExpandProperty Name)"
                 }
-                # Search without path filter — package layout may not contain "win-x64" in path
-                $dll = Get-ChildItem $pkgDir -Recurse `
-                         -Filter "libvlc.dll" -ErrorAction SilentlyContinue |
+              }
+            }
+
+            # ── Strategy 3: broad search of entire NuGet cache root ───────────────
+            if (-not $vlcSrc) {
+              Write-Host "Falling back to broad NuGet cache search..."
+              $lines    = (& dotnet nuget locals global-packages -l 2>&1) -join "`n"
+              if ($lines -match "global-packages:\s*(.+)") {
+                $nugetRoot = $Matches[1].Trim()
+                $dll = Get-ChildItem $nugetRoot -Recurse -Filter "libvlc.dll" `
+                         -ErrorAction SilentlyContinue |
+                       Where-Object { $_.FullName -notmatch "\\x86\\" } |
                        Select-Object -First 1
                 if ($dll) {
-                  Write-Host "Found libvlc.dll at: $($dll.FullName)"
+                  Write-Host "Found via broad search: $($dll.FullName)"
                   $vlcSrc = $dll.DirectoryName
                 }
               }
             }
 
             if (-not $vlcSrc) {
-              Write-Error "Could not locate VLC native libs. Check the MSBuild output above for the package path."
+              Write-Error "Could not locate VLC native libs after all strategies. Review tree dumps above."
               exit 1
             }
 
@@ -110,10 +144,11 @@ jobs:
             Copy-Item -Recurse -Force "$vlcSrc\*" "$dest\"
           }
 
-          # Remove the hint file — it's not part of the app
+          # Clean up hint files — not part of the app
+          Remove-Item "publish\vlc-pkg-root.txt"   -ErrorAction SilentlyContinue
           Remove-Item "publish\vlc-native-root.txt" -ErrorAction SilentlyContinue
 
-          # Always print the full tree so CI logs show exactly what goes into the zip
+          # Always print final tree so CI logs show exactly what goes into the zip
           Write-Host "`nlibvlc\win-x64 tree:"
           Get-ChildItem $dest -Recurse | ForEach-Object {
             $rel = $_.FullName.Substring((Resolve-Path $dest).Path.Length + 1)

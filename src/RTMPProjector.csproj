@@ -37,30 +37,18 @@
   </ItemGroup>
 
   <!--
-    VideoLAN.LibVLC.Windows 3.x ships its targets in build/net20/ and build/net40/,
-    which .NET 8 SDK projects don't pick up automatically. Instead we use the
-    GeneratePathProperty above ($(PkgVideoLAN_LibVLC_Windows)) to get the package
-    folder and copy the win-x64 native files directly after publish.
-
-    We try two candidate paths (the package layout differs between versions).
-    The WriteLinesToFile target writes the resolved path to a file so the
-    CI workflow can find the correct location without re-searching the NuGet cache.
+    VideoLAN.LibVLC.Windows 3.x ships its build targets in build/net20/ and
+    build/net40/, which .NET 8 SDK projects don't pick up automatically.
+    We use GeneratePathProperty above to get $(PkgVideoLAN_LibVLC_Windows) and
+    write that path to a hint file so the CI workflow can locate the DLLs.
+    No Exec/PowerShell — just WriteLinesToFile, which is safe on all platforms.
   -->
-  <!--
-    Exec task runs a PowerShell one-liner to find libvlc.dll anywhere in the
-    VideoLAN.LibVLC.Windows package (layout varies between package versions).
-    The result is written to a hint file consumed by the CI "Ensure VLC" step.
-    If libvlc.dll is found we also copy the whole parent directory into publish/.
-  -->
-  <Target Name="CopyVlcToPublishDir" AfterTargets="Publish" Condition="'$(PkgVideoLAN_LibVLC_Windows)' != ''">
-
+  <Target Name="WriteVlcHint" AfterTargets="Publish" Condition="'$(PkgVideoLAN_LibVLC_Windows)' != ''">
     <Message Text="VLC package root: $(PkgVideoLAN_LibVLC_Windows)" Importance="high" />
-
-    <!-- Use PowerShell to find libvlc.dll anywhere in the package and write its directory -->
-    <Exec Command="powershell -NonInteractive -Command &quot;$dll = Get-ChildItem '$(PkgVideoLAN_LibVLC_Windows)' -Recurse -Filter libvlc.dll -ErrorAction SilentlyContinue | Select-Object -First 1; if ($dll) { $dll.DirectoryName | Set-Content '$(PublishDir)vlc-native-root.txt' } else { 'NOT_FOUND: $(PkgVideoLAN_LibVLC_Windows)' | Set-Content '$(PublishDir)vlc-native-root.txt' }&quot;"
-          WorkingDirectory="$(MSBuildProjectDirectory)" />
-
-    <Message Text="VLC hint file written — CI step will copy from the discovered path." Importance="high" />
+    <WriteLinesToFile File="$(PublishDir)vlc-pkg-root.txt"
+                      Lines="$(PkgVideoLAN_LibVLC_Windows)"
+                      Overwrite="true" />
+    <Message Text="Wrote VLC package root hint to $(PublishDir)vlc-pkg-root.txt" Importance="high" />
   </Target>
 
 </Project>
