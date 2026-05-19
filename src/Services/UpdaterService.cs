@@ -196,22 +196,46 @@ public class UpdaterService
         // C# interpolations use {{ expr }} syntax.
         File.WriteAllText(script, $$"""
             $appPid = {{Environment.ProcessId}}
-            $zip = '{{zipPath.Replace("'", "''")}}'
-            $dir = '{{appDir.Replace("'", "''")}}'
-            $exe = '{{appExe.Replace("'", "''")}}'
+            $zip    = '{{zipPath.Replace("'", "''")}}'
+            $dir    = '{{appDir.Replace("'", "''")}}'
+            $exe    = '{{appExe.Replace("'", "''")}}'
+            $log    = Join-Path $env:TEMP 'rtmprojector_update.log'
+            $tmp    = Join-Path $env:TEMP 'rtmprojector_update_extract'
 
-            # Wait for the app to close ($pid is a reserved PS variable — use $appPid)
+            function Log($msg) { "[$(Get-Date -f 'HH:mm:ss')] $msg" | Add-Content $log }
+
+            Log "Update starting — AppPID=$appPid zip=$zip"
+            Log "Target dir: $dir"
+
+            # Wait for the app to exit ($pid is a reserved PS variable — use $appPid)
             try { Wait-Process -Id $appPid -Timeout 15 -ErrorAction SilentlyContinue } catch {}
-            Start-Sleep -Seconds 1
+            Start-Sleep -Milliseconds 500
+            Log "App exited (or 15s timeout). Proceeding with extraction."
 
-            # Extract zip, overwriting existing files
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dir, $true)
+            try {
+                # Extract to a temp dir first so we never partially overwrite
+                if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $tmp)
+                $count = (Get-ChildItem $tmp -Recurse -File).Count
+                Log "Extracted $count files to $tmp"
 
-            # Restart
-            if (Test-Path $exe) { Start-Process $exe }
+                # Robocopy: mirror temp dir over app dir (handles any remaining locks gracefully)
+                $rc = robocopy $tmp $dir /E /IS /IT /NP /NFL /NDL /NJH /NJS
+                Log "Robocopy exit code: $LASTEXITCODE (0-7 = success)"
 
-            # Clean up script
+                Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+            } catch {
+                Log "ERROR during update: $_"
+            }
+
+            if (Test-Path $exe) {
+                Log "Restarting $exe"
+                Start-Process $exe
+            } else {
+                Log "ERROR: exe not found after update: $exe"
+            }
+
             Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
             """);
 
