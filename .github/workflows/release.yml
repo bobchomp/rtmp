@@ -61,32 +61,46 @@ jobs:
           if ($hasLibvlc -and $pluginCount -gt 0) {
             Write-Host "VLC verified — skipping NuGet cache copy"
           } else {
-            Write-Warning "VLC incomplete (libvlc=$hasLibvlc plugins=$pluginCount) — copying from NuGet cache"
+            Write-Warning "VLC incomplete (libvlc=$hasLibvlc plugins=$pluginCount) — locating source"
 
-            $cacheRoots = @(
-              "$env:USERPROFILE\.nuget\packages",
-              "$env:NUGET_PACKAGES"
-            ) | Where-Object { $_ -and (Test-Path $_) }
-
-            $libvlcDll = $null
-            foreach ($root in $cacheRoots) {
-              $libvlcDll = Get-ChildItem "$root\videolan.libvlc.windows" -Recurse `
-                             -Filter "libvlc.dll" -ErrorAction SilentlyContinue |
-                           Where-Object { $_.FullName -match "win-x64" } |
-                           Select-Object -First 1
-              if ($libvlcDll) { break }
+            # Strategy 1: read the path written by the MSBuild target
+            $vlcSrc = $null
+            $hintFile = "publish\vlc-native-root.txt"
+            if (Test-Path $hintFile) {
+              $hint = (Get-Content $hintFile -Raw).Trim()
+              Write-Host "MSBuild hint: $hint"
+              if ($hint -notmatch "^NOT_FOUND" -and (Test-Path "$hint\libvlc.dll")) {
+                $vlcSrc = $hint
+              }
             }
 
-            if (-not $libvlcDll) {
-              Write-Error "libvlc.dll not found in any NuGet cache — release will fail at runtime!"
+            # Strategy 2: ask dotnet where the global packages cache is
+            if (-not $vlcSrc) {
+              $nugetLocal = & dotnet nuget locals global-packages --list 2>&1
+              Write-Host "dotnet nuget locals: $nugetLocal"
+              $nugetRoot  = ($nugetLocal -split "`n" | Where-Object { $_ -match "global-packages:" }) -replace ".*global-packages:\s*", "" | Select-Object -First 1
+              Write-Host "NuGet global packages root: '$nugetRoot'"
+              if ($nugetRoot -and (Test-Path $nugetRoot)) {
+                $dll = Get-ChildItem "$nugetRoot\videolan.libvlc.windows" -Recurse `
+                         -Filter "libvlc.dll" -ErrorAction SilentlyContinue |
+                       Where-Object { $_.FullName -match "win-x64" } |
+                       Select-Object -First 1
+                if ($dll) { $vlcSrc = $dll.DirectoryName }
+              }
+            }
+
+            if (-not $vlcSrc) {
+              Write-Error "Could not locate VLC native libs. Check the MSBuild output above for the package path."
               exit 1
             }
 
-            $vlcSrc = $libvlcDll.DirectoryName
             Write-Host "Copying VLC from: $vlcSrc"
             New-Item -ItemType Directory -Force $dest | Out-Null
             Copy-Item -Recurse -Force "$vlcSrc\*" "$dest\"
           }
+
+          # Remove the hint file — it's not part of the app
+          Remove-Item "publish\vlc-native-root.txt" -ErrorAction SilentlyContinue
 
           # Always print the full tree so CI logs show exactly what goes into the zip
           Write-Host "`nlibvlc\win-x64 tree:"
