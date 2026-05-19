@@ -43,23 +43,68 @@ public partial class ProjectionWindow : Window
 
     // ── Startup ────────────────────────────────────────────────────────────
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private static readonly string VlcLogPath =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                     "RTMPProjector", "vlc-init.log");
+
+    private static void VlcLog(string msg)
     {
-        var vlcDir     = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
-        var pluginsDir = Path.Combine(vlcDir, "plugins");
         try
         {
-            // Pass the path explicitly — relying on auto-detection fails in published apps.
-            Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
+            Directory.CreateDirectory(Path.GetDirectoryName(VlcLogPath)!);
+            File.AppendAllText(VlcLogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n");
+        }
+        catch { }
+    }
 
-            _libVlc ??= new LibVLC(enableDebugLogs: false,
-                // Tell VLC exactly where to find its plugins — the default discovery
-                // can fail when libvlccore.dll is loaded via NativeLibrary.Load.
-                $"--plugin-path={pluginsDir}",
-                "--network-caching=150",
-                "--live-caching=150",
-                "--rtmp-caching=150",
-                "--no-video-title-show");
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // Clear log from previous attempt
+        try { File.Delete(VlcLogPath); } catch { }
+
+        var vlcDir     = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
+        var pluginsDir = Path.Combine(vlcDir, "plugins");
+
+        VlcLog($"BaseDirectory : {AppContext.BaseDirectory}");
+        VlcLog($"vlcDir        : {vlcDir}");
+        VlcLog($"vlcDir exists : {Directory.Exists(vlcDir)}");
+
+        // Dump everything inside libvlc\win-x64 so we can see exactly what was packaged
+        if (Directory.Exists(vlcDir))
+        {
+            foreach (var f in Directory.GetFiles(vlcDir, "*", SearchOption.AllDirectories))
+                VlcLog($"  FILE: {f.Substring(vlcDir.Length)}");
+        }
+        else
+        {
+            VlcLog("  (directory does not exist)");
+        }
+
+        var pluginDlls = Directory.Exists(pluginsDir)
+            ? Directory.GetFiles(pluginsDir, "*.dll", SearchOption.AllDirectories)
+            : [];
+        VlcLog($"Plugin DLLs (recursive): {pluginDlls.Length}");
+
+        try
+        {
+            VlcLog("Calling Core.Initialize...");
+            Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
+            VlcLog("Core.Initialize OK");
+
+            if (_libVlc == null)
+            {
+                var opts = new[]
+                {
+                    $"--plugin-path={pluginsDir}",
+                    "--network-caching=150",
+                    "--live-caching=150",
+                    "--rtmp-caching=150",
+                    "--no-video-title-show"
+                };
+                VlcLog($"Creating LibVLC with options: {string.Join(" ", opts)}");
+                _libVlc = new LibVLC(enableDebugLogs: false, opts);
+                VlcLog("LibVLC created OK");
+            }
 
             _player = new MediaPlayer(_libVlc);
 
@@ -67,9 +112,6 @@ public partial class ProjectionWindow : Window
             _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
             _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
 
-            // Create the WinForms panel and wire its HWND directly to VLC.
-            // Done at ApplicationIdle so the WindowsFormsHost has been rendered
-            // and the panel Handle is valid before we call Play().
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
             {
                 _videoPanel = new WinForms.Panel { BackColor = System.Drawing.Color.Black };
@@ -82,20 +124,21 @@ public partial class ProjectionWindow : Window
         }
         catch (Exception ex)
         {
-            var hasDll     = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
-            var hasCore    = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
-            var pluginCount = Directory.Exists(pluginsDir)
-                ? Directory.GetFiles(pluginsDir, "*.dll").Length : -1;
+            VlcLog($"EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null) VlcLog($"  InnerException: {ex.InnerException.Message}");
+
+            var hasDll  = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
+            var hasCore = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
 
             WaitingUrlLabel.Text = hasDll
-                ? $"VLC DLLs found but failed to load — a dependency may be missing " +
-                  $"(try installing the Visual C++ Redistributable 2015-2022 x64 from Microsoft).\n\n" +
+                ? $"VLC failed to load.\n\n" +
                   $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}  " +
-                  $"plugins/ {(pluginCount >= 0 ? $"✓ ({pluginCount} DLLs)" : "✗")}\n\n" +
-                  $"Detail: {ex.Message}"
-                : $"libvlc DLLs are missing from: {vlcDir}\n\n" +
-                  $"Re-download the latest release and make sure the libvlc folder " +
-                  $"is next to RTMPProjector.exe.\n\nDetail: {ex.Message}";
+                  $"plugins/ {(pluginDlls.Length > 0 ? $"✓ ({pluginDlls.Length} DLLs)" : "✗ (0 DLLs)")}\n\n" +
+                  $"Detail: {ex.Message}\n\n" +
+                  $"Full log: {VlcLogPath}"
+                : $"libvlc DLLs missing from:\n{vlcDir}\n\n" +
+                  $"Re-download the release and make sure the libvlc folder is next to RTMPProjector.exe.\n\n" +
+                  $"Full log: {VlcLogPath}";
         }
     }
 
