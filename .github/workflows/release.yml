@@ -53,10 +53,11 @@ jobs:
         run: |
           $dest       = "publish\libvlc\win-x64"
           $pluginsDir = "$dest\plugins"
-          $pluginCount = if (Test-Path $pluginsDir) { (Get-ChildItem $pluginsDir -Filter "*.dll").Count } else { 0 }
+          # -Recurse so plugins in subdirectories (access\, codec\, etc.) are counted
+          $pluginCount = if (Test-Path $pluginsDir) { (Get-ChildItem $pluginsDir -Recurse -Filter "*.dll").Count } else { 0 }
           $hasLibvlc  = Test-Path "$dest\libvlc.dll"
 
-          Write-Host "Pre-check — libvlc.dll: $hasLibvlc  plugins: $pluginCount DLLs"
+          Write-Host "Pre-check — libvlc.dll: $hasLibvlc  plugins (recursive): $pluginCount DLLs"
 
           if ($hasLibvlc -and $pluginCount -gt 0) {
             Write-Host "VLC verified — skipping NuGet cache copy"
@@ -141,7 +142,11 @@ jobs:
 
             Write-Host "Copying VLC from: $vlcSrc"
             New-Item -ItemType Directory -Force $dest | Out-Null
-            Copy-Item -Recurse -Force "$vlcSrc\*" "$dest\"
+            # Use robocopy instead of Copy-Item: the wildcard+recurse form of Copy-Item
+            # has a known PowerShell bug where it creates subdirs but skips their contents.
+            # Robocopy /E copies the full tree reliably; exit codes 0-7 all mean success.
+            $rc = (robocopy $vlcSrc $dest /E /IS /IT /NP /NFL /NDL /NJH /NJS)
+            if ($LASTEXITCODE -gt 7) { Write-Error "robocopy failed ($LASTEXITCODE)"; exit 1 }
           }
 
           # Clean up hint files — not part of the app
