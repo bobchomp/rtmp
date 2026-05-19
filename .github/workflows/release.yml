@@ -81,11 +81,22 @@ jobs:
               $nugetRoot  = ($nugetLocal -split "`n" | Where-Object { $_ -match "global-packages:" }) -replace ".*global-packages:\s*", "" | Select-Object -First 1
               Write-Host "NuGet global packages root: '$nugetRoot'"
               if ($nugetRoot -and (Test-Path $nugetRoot)) {
-                $dll = Get-ChildItem "$nugetRoot\videolan.libvlc.windows" -Recurse `
+                $pkgDir = Join-Path $nugetRoot "videolan.libvlc.windows"
+                if (Test-Path $pkgDir) {
+                  Write-Host "`nVideoLAN.LibVLC.Windows package tree:"
+                  Get-ChildItem $pkgDir -Recurse | ForEach-Object {
+                    $rel = $_.FullName.Substring((Resolve-Path $pkgDir).Path.Length + 1)
+                    Write-Host "  $rel"
+                  }
+                }
+                # Search without path filter — package layout may not contain "win-x64" in path
+                $dll = Get-ChildItem $pkgDir -Recurse `
                          -Filter "libvlc.dll" -ErrorAction SilentlyContinue |
-                       Where-Object { $_.FullName -match "win-x64" } |
                        Select-Object -First 1
-                if ($dll) { $vlcSrc = $dll.DirectoryName }
+                if ($dll) {
+                  Write-Host "Found libvlc.dll at: $($dll.FullName)"
+                  $vlcSrc = $dll.DirectoryName
+                }
               }
             }
 
