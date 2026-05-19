@@ -41,21 +41,40 @@
     which .NET 8 SDK projects don't pick up automatically. Instead we use the
     GeneratePathProperty above ($(PkgVideoLAN_LibVLC_Windows)) to get the package
     folder and copy the win-x64 native files directly after publish.
+
+    We try two candidate paths (the package layout differs between versions).
+    The WriteLinesToFile target writes the resolved path to a file so the
+    CI workflow can find the correct location without re-searching the NuGet cache.
   -->
   <Target Name="CopyVlcToPublishDir" AfterTargets="Publish">
     <PropertyGroup>
-      <_VlcNativeRoot>$(PkgVideoLAN_LibVLC_Windows)\runtimes\win-x64\native</_VlcNativeRoot>
+      <!-- Try both known package layouts; use whichever exists -->
+      <_VlcNativeRoot Condition="Exists('$(PkgVideoLAN_LibVLC_Windows)\runtimes\win-x64\native\libvlc.dll')">$(PkgVideoLAN_LibVLC_Windows)\runtimes\win-x64\native</_VlcNativeRoot>
+      <_VlcNativeRoot Condition="Exists('$(PkgVideoLAN_LibVLC_Windows)\runtimes\win\native\libvlc\win-x64\libvlc.dll')">$(PkgVideoLAN_LibVLC_Windows)\runtimes\win\native\libvlc\win-x64</_VlcNativeRoot>
     </PropertyGroup>
+
+    <Message Text="VLC package root: $(PkgVideoLAN_LibVLC_Windows)" Importance="high" />
+    <Message Text="VLC native root: $(_VlcNativeRoot)" Importance="high" />
+
+    <!-- Write the resolved path so the CI step can use it directly -->
+    <WriteLinesToFile File="$(PublishDir)vlc-native-root.txt"
+                      Lines="$(_VlcNativeRoot)"
+                      Overwrite="true"
+                      Condition="'$(_VlcNativeRoot)' != ''" />
+    <WriteLinesToFile File="$(PublishDir)vlc-native-root.txt"
+                      Lines="NOT_FOUND: $(PkgVideoLAN_LibVLC_Windows)"
+                      Overwrite="true"
+                      Condition="'$(_VlcNativeRoot)' == ''" />
+
     <ItemGroup>
       <_VlcFiles Include="$(_VlcNativeRoot)\**\*" />
     </ItemGroup>
-    <Message Text="Copying VLC native libs from $(_VlcNativeRoot)" Importance="high" />
     <Copy SourceFiles="@(_VlcFiles)"
           DestinationFolder="$(PublishDir)libvlc\win-x64\%(RecursiveDir)"
           SkipUnchangedFiles="true"
-          Condition="Exists('$(_VlcNativeRoot)')" />
-    <Warning Text="VLC native libs not found at $(_VlcNativeRoot) — video playback will fail in the release build."
-             Condition="!Exists('$(_VlcNativeRoot)')" />
+          Condition="'$(_VlcNativeRoot)' != ''" />
+    <Warning Text="VLC native libs not found in $(PkgVideoLAN_LibVLC_Windows) — CI step will handle it."
+             Condition="'$(_VlcNativeRoot)' == ''" />
   </Target>
 
 </Project>
