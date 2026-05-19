@@ -4,7 +4,6 @@ using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
-using LibVLCSharp.WPF;
 using RTMPProjector.Models;
 using WinForms = System.Windows.Forms;
 
@@ -15,6 +14,7 @@ public partial class ProjectionWindow : Window
     private static LibVLC? _libVlc;
     private MediaPlayer? _player;
     private LibVLCSharp.Shared.Media? _media;
+    private WinForms.Panel? _videoPanel;
 
     private readonly string _rtmpUrl;
     private readonly DispatcherTimer _hudTimer = new() { Interval = TimeSpan.FromSeconds(3) };
@@ -62,16 +62,23 @@ public partial class ProjectionWindow : Window
                 "--no-video-title-show");
 
             _player = new MediaPlayer(_libVlc);
-            VideoView.MediaPlayer = _player;
 
             _player.Playing    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Collapsed);
             _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
             _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
 
-            if (!string.IsNullOrEmpty(_rtmpUrl))
-                // Delay until after the first render pass so the VideoView's
-                // internal WindowsFormsHost HWND exists before VLC tries to use it.
-                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, BeginPlay);
+            // Create the WinForms panel and wire its HWND directly to VLC.
+            // Done at ApplicationIdle so the WindowsFormsHost has been rendered
+            // and the panel Handle is valid before we call Play().
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+            {
+                _videoPanel = new WinForms.Panel { BackColor = System.Drawing.Color.Black };
+                VlcHost.Child = _videoPanel;
+                _player.Hwnd  = _videoPanel.Handle;
+
+                if (!string.IsNullOrEmpty(_rtmpUrl))
+                    BeginPlay();
+            });
         }
         catch (Exception ex)
         {
@@ -113,6 +120,7 @@ public partial class ProjectionWindow : Window
         _player?.Stop();
         _player?.Dispose();
         _media?.Dispose();
+        _videoPanel?.Dispose();
     }
 
     // ── Monitor positioning ────────────────────────────────────────────────
