@@ -45,13 +45,17 @@ public partial class ProjectionWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var vlcDir = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
+        var vlcDir     = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
+        var pluginsDir = Path.Combine(vlcDir, "plugins");
         try
         {
             // Pass the path explicitly — relying on auto-detection fails in published apps.
             Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
 
             _libVlc ??= new LibVLC(enableDebugLogs: false,
+                // Tell VLC exactly where to find its plugins — the default discovery
+                // can fail when libvlccore.dll is loaded via NativeLibrary.Load.
+                $"--plugin-path={pluginsDir}",
                 "--network-caching=150",
                 "--live-caching=150",
                 "--rtmp-caching=150",
@@ -71,14 +75,16 @@ public partial class ProjectionWindow : Window
         }
         catch (Exception ex)
         {
-            var hasDll    = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
-            var hasCore   = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
-            var hasPlugin = Directory.Exists(Path.Combine(vlcDir, "plugins"));
+            var hasDll     = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
+            var hasCore    = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
+            var pluginCount = Directory.Exists(pluginsDir)
+                ? Directory.GetFiles(pluginsDir, "*.dll").Length : -1;
 
             WaitingUrlLabel.Text = hasDll
                 ? $"VLC DLLs found but failed to load — a dependency may be missing " +
                   $"(try installing the Visual C++ Redistributable 2015-2022 x64 from Microsoft).\n\n" +
-                  $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}  plugins/ {(hasPlugin ? "✓" : "✗")}\n\n" +
+                  $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}  " +
+                  $"plugins/ {(pluginCount >= 0 ? $"✓ ({pluginCount} DLLs)" : "✗")}\n\n" +
                   $"Detail: {ex.Message}"
                 : $"libvlc DLLs are missing from: {vlcDir}\n\n" +
                   $"Re-download the latest release and make sure the libvlc folder " +
