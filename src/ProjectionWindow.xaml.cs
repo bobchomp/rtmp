@@ -92,19 +92,7 @@ public partial class ProjectionWindow : Window
             VlcLog("Core.Initialize OK");
 
             if (_libVlc == null)
-            {
-                var opts = new[]
-                {
-                    $"--plugin-path={pluginsDir}",
-                    "--network-caching=150",
-                    "--live-caching=150",
-                    "--rtmp-caching=150",
-                    "--no-video-title-show"
-                };
-                VlcLog($"Creating LibVLC with options: {string.Join(" ", opts)}");
-                _libVlc = new LibVLC(enableDebugLogs: false, opts);
-                VlcLog("LibVLC created OK");
-            }
+                _libVlc = TryCreateLibVlc(pluginsDir);
 
             _player = new MediaPlayer(_libVlc);
 
@@ -140,6 +128,57 @@ public partial class ProjectionWindow : Window
                   $"Re-download the release and make sure the libvlc folder is next to RTMPProjector.exe.\n\n" +
                   $"Full log: {VlcLogPath}";
         }
+    }
+
+    // VLC's libvlc_new() can return NULL for several reasons even when all DLLs
+    // are present: corrupt plugin cache left by a previous failed launch, or the
+    // internal argument parser mishandling paths with spaces in --plugin-path.
+    // Try strategies in order and return the first that works.
+    private static LibVLC TryCreateLibVlc(string pluginsDir)
+    {
+        // pluginsDir forward-slash variant (VLC's parser can mishandle backslashes
+        // embedded in --option=value strings on some versions)
+        var pluginsFwd = pluginsDir.Replace('\\', '/');
+
+        // Each inner array is one attempt. --reset-plugins-cache forces VLC to
+        // regenerate %APPDATA%\vlc\plugins.dat, fixing corrupt cache from
+        // previous failed launches.
+        string[][] strategies =
+        [
+            // 1. No explicit path — VLC auto-discovers plugins via GetModuleFileName
+            //    on libvlccore.dll. Force cache reset in case of prior corruption.
+            ["--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
+
+            // 2. Explicit path with forward slashes + cache reset
+            [$"--plugin-path={pluginsFwd}", "--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
+
+            // 3. Explicit path with backslashes + cache reset (original approach)
+            [$"--plugin-path={pluginsDir}", "--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
+
+            // 4. Minimal — no caching args, no plugin path, just reset cache
+            ["--reset-plugins-cache"],
+
+            // 5. Truly minimal — nothing at all
+            [],
+        ];
+
+        Exception? last = null;
+        foreach (var opts in strategies)
+        {
+            VlcLog($"[Strategy {Array.IndexOf(strategies, opts) + 1}] {(opts.Length == 0 ? "(no options)" : string.Join(" ", opts))}");
+            try
+            {
+                var instance = new LibVLC(enableDebugLogs: false, opts);
+                VlcLog($"  → OK");
+                return instance;
+            }
+            catch (Exception ex)
+            {
+                VlcLog($"  → FAILED: {ex.Message}");
+                last = ex;
+            }
+        }
+        throw last!;
     }
 
     private void BeginPlay()

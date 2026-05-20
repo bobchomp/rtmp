@@ -64,6 +64,7 @@ public partial class UpdateWindow : Window
     public void ShowDone(string zipPath)
     {
         _downloadedZipPath = zipPath;
+        InstallLogHint.Text = $"Install log: {UpdaterService.InstallLogPath}";
         ShowScreen(ScreenDone);
     }
 

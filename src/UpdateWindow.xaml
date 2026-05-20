@@ -112,6 +112,8 @@
                         Windows may show a SmartScreen warning because the update
                         script is not code-signed. Click "More info → Run anyway" if prompted.
                     </TextBlock>
+                    <TextBlock x:Name="InstallLogHint" Foreground="{StaticResource TextMuted}"
+                               FontSize="10" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
 
