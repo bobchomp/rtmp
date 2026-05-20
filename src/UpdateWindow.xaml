@@ -122,6 +122,8 @@
                         Content="Run Installer" Click="BtnInstall_Click"/>
                 <Button Style="{StaticResource GhostBtn}" Content="Not Now"
                         Margin="12,0,0,0" Click="BtnLater_Click"/>
+                <Button Style="{StaticResource GhostBtn}" Content="View Log"
+                        Margin="12,0,0,0" Click="OpenLogFolder_Click"/>
             </StackPanel>
         </StackPanel>
 

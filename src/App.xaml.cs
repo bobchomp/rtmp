@@ -22,6 +22,7 @@ public partial class App : Application
     private UpdaterService? _updater;
     private UpdateWindow? _updateWindow;
     private UpdateInfo? _pendingUpdateInfo;
+    private string? _downloadedAssetPath;
     private UpdateStatus _updateStatus = UpdateStatus.Idle;
     private System.Threading.Timer? _updateTimer;
 
@@ -100,11 +101,12 @@ public partial class App : Application
         _updateWindow!.ShowUpdateInfo(info);
     }
 
-    private void OnUpdateComplete(string zipPath)
+    private void OnUpdateComplete(string assetPath)
     {
+        _downloadedAssetPath = assetPath;
         _updateStatus = UpdateStatus.Ready;
         RebuildTrayMenu();
-        _updateWindow?.ShowDone(zipPath);
+        _updateWindow?.ShowDone(assetPath, _pendingUpdateInfo);
     }
 
     private void OnUpdateError(string message)
@@ -141,6 +143,11 @@ public partial class App : Application
     {
         if (_updateWindow == null || !_updateWindow.IsLoaded)
             _updateWindow = new UpdateWindow(_updater!);
+
+        // Restore the "ready to install" state if the window was recreated after download
+        if (_updateStatus == UpdateStatus.Ready && _downloadedAssetPath != null)
+            _updateWindow.ShowDone(_downloadedAssetPath, _pendingUpdateInfo);
+
         _updateWindow.Show();
         _updateWindow.Activate();
     }

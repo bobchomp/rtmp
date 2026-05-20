@@ -208,10 +208,16 @@ public class UpdaterService
         var registryDir = ReadInstallDirFromRegistry();
         var installDir  = registryDir ?? appDir;
 
+        // Remove Zone.Identifier so Windows doesn't flag a downloaded exe as unsafe
+        try { File.Delete(setupPath + ":Zone.Identifier"); } catch { }
+
+        // /SILENT (not /VERYSILENT) shows a basic progress dialog — this is intentional:
+        // /VERYSILENT + /SUPPRESSMSGBOXES swallows SmartScreen and other error dialogs
+        // silently, leaving the user with no feedback if something goes wrong.
         Process.Start(new ProcessStartInfo
         {
             FileName  = setupPath,
-            Arguments = $"/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /NOCANCEL /DIR=\"{installDir}\"",
+            Arguments = $"/SILENT /CLOSEAPPLICATIONS /NOCANCEL /DIR=\"{installDir}\"",
             UseShellExecute = true
         });
     }
@@ -286,12 +292,13 @@ public class UpdaterService
             Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
             """);
 
+        // Keep the window visible so the user can see progress and any errors
         Process.Start(new ProcessStartInfo
         {
             FileName  = "powershell.exe",
-            Arguments = $"-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{script}\"",
+            Arguments = $"-ExecutionPolicy Bypass -File \"{script}\"",
             UseShellExecute = true,
-            WindowStyle     = ProcessWindowStyle.Hidden
+            WindowStyle     = ProcessWindowStyle.Normal
         });
     }
 

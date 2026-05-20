@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
@@ -61,9 +62,10 @@ public partial class UpdateWindow : Window
     }
 
     /// <summary>Mirrors onUpdateComplete.</summary>
-    public void ShowDone(string zipPath)
+    public void ShowDone(string assetPath, UpdateInfo? info = null)
     {
-        _downloadedZipPath = zipPath;
+        _downloadedZipPath = assetPath;
+        if (info != null) _info = info;
         InstallLogHint.Text = $"Install log: {UpdaterService.InstallLogPath}";
         ShowScreen(ScreenDone);
     }
@@ -104,20 +106,48 @@ public partial class UpdateWindow : Window
     {
         if (string.IsNullOrEmpty(_downloadedZipPath)) return;
 
-        if (_info?.IsInstaller == true)
+        try
         {
-            _updater.LaunchSetupInstaller(_downloadedZipPath);
-            // The installer closes us via /CLOSEAPPLICATIONS — give it a moment
-            Task.Delay(500).ContinueWith(_ =>
-                Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+            if (_info?.IsInstaller == true)
+            {
+                _updater.LaunchSetupInstaller(_downloadedZipPath);
+                Task.Delay(2000).ContinueWith(_ =>
+                    Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+            }
+            else
+            {
+                _updater.LaunchUpdateScript(_downloadedZipPath);
+                Task.Delay(1500).ContinueWith(_ =>
+                    Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+            }
         }
-        else
+        catch (Exception ex)
         {
-            _updater.LaunchUpdateScript(_downloadedZipPath);
-            // Script detects our PID exiting — give it a moment
-            Task.Delay(1500).ContinueWith(_ =>
-                Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+            MessageBox.Show(
+                $"Failed to launch installer:\n\n{ex.Message}\n\n" +
+                $"You can install manually from:\n{_downloadedZipPath}",
+                "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    // Hide instead of close so _downloadedZipPath / _info survive if user reopens
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        e.Cancel = true;
+        Hide();
+    }
+
+    private void OpenLogFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var logPath = UpdaterService.InstallLogPath;
+        try
+        {
+            if (System.IO.File.Exists(logPath))
+                Process.Start("notepad.exe", logPath);
+            else
+                Process.Start("explorer.exe", System.IO.Path.GetDirectoryName(logPath)!);
+        }
+        catch { }
     }
 
     private void BtnRetry_Click(object sender, RoutedEventArgs e)
