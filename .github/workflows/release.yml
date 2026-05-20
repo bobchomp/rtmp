@@ -200,6 +200,26 @@ jobs:
           }
           Write-Host "libvlc\win-x64 contents:"; Get-ChildItem $dest | Select-Object -ExpandProperty Name
 
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Inno Setup not found — installing via choco..."
+            choco install innosetup --no-progress -y | Out-Null
+            $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          }
+          Write-Host "ISCC: $iscc"
+          & $iscc `
+            "/DAppVersion=${{ steps.version.outputs.nuget_version }}" `
+            "installer\RTMPProjector.iss"
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed ($LASTEXITCODE)"; exit 1 }
+          # ISCC writes to the OutputDir in the .iss (installer\), rename to include tag
+          $src = "installer\RTMPProjector-${{ steps.version.outputs.nuget_version }}-Setup.exe"
+          $dst = "RTMPProjector-${{ steps.version.outputs.tag }}-Setup.exe"
+          Move-Item $src $dst
+          Write-Host "Installer: $dst  ($('{0:F1}' -f ((Get-Item $dst).Length / 1MB)) MB)"
+
       - name: Zip release
         shell: pwsh
         run: |
@@ -213,14 +233,18 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
+          files: |
+            RTMPProjector-${{ steps.version.outputs.tag }}-Setup.exe
+            RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
           body: |
             ## RTMP Projector ${{ steps.version.outputs.tag }}
 
             ### Installation
-            1. Download the zip below and extract it anywhere
-            2. Run `RTMPProjector.exe`
-            3. On first launch, MediaMTX (~10 MB) is downloaded automatically
+            **Recommended:** Download `RTMPProjector-*-Setup.exe` — runs the installer, lets you pick the install folder, adds a Start Menu shortcut, and registers an uninstaller.
+
+            **Portable:** Download the zip, extract it anywhere, and run `RTMPProjector.exe`.
+
+            On first launch, MediaMTX (~10 MB) is downloaded automatically.
 
             ### Requirements
             - Windows 10 / 11 x64

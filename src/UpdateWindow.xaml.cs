@@ -103,11 +103,21 @@ public partial class UpdateWindow : Window
     private void BtnInstall_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_downloadedZipPath)) return;
-        _updater.LaunchUpdateScript(_downloadedZipPath);
 
-        // App exits after a brief delay so the script can detect our PID closing
-        Task.Delay(1500).ContinueWith(_ =>
-            Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+        if (_info?.IsInstaller == true)
+        {
+            _updater.LaunchSetupInstaller(_downloadedZipPath);
+            // The installer closes us via /CLOSEAPPLICATIONS — give it a moment
+            Task.Delay(500).ContinueWith(_ =>
+                Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+        }
+        else
+        {
+            _updater.LaunchUpdateScript(_downloadedZipPath);
+            // Script detects our PID exiting — give it a moment
+            Task.Delay(1500).ContinueWith(_ =>
+                Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+        }
     }
 
     private void BtnRetry_Click(object sender, RoutedEventArgs e)
