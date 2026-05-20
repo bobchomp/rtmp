@@ -200,6 +200,35 @@ jobs:
           }
           Write-Host "libvlc\win-x64 contents:"; Get-ChildItem $dest | Select-Object -ExpandProperty Name
 
+      - name: Bundle MediaMTX binary
+        shell: pwsh
+        run: |
+          $dest = "publish\mediamtx.exe"
+          if (Test-Path $dest) { Write-Host "mediamtx.exe already present — skipping"; exit 0 }
+
+          Write-Host "Fetching latest MediaMTX release info..."
+          $headers = @{ "User-Agent" = "RTMPProjector-CI"; "Accept" = "application/json" }
+          $rel  = Invoke-RestMethod "https://api.github.com/repos/bluenviron/mediamtx/releases/latest" -Headers $headers
+          $asset = $rel.assets | Where-Object {
+            $_.name -match "windows_amd64" -and $_.name -match "\.zip$"
+          } | Select-Object -First 1
+          if (-not $asset) { Write-Error "No windows_amd64 zip found in MediaMTX release"; exit 1 }
+
+          Write-Host "Downloading $($asset.name) ($([math]::Round($asset.size/1MB, 1)) MB)..."
+          $zip = Join-Path $env:TEMP "mediamtx.zip"
+          Invoke-WebRequest $asset.browser_download_url -OutFile $zip -Headers $headers
+
+          Write-Host "Extracting mediamtx.exe..."
+          $tmp = Join-Path $env:TEMP "mediamtx_extract"
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          Expand-Archive $zip $tmp
+          $exe = Get-ChildItem $tmp -Recurse -Filter "mediamtx.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "mediamtx.exe not found in zip"; exit 1 }
+          Copy-Item $exe.FullName $dest
+          Remove-Item $tmp -Recurse -Force
+          Remove-Item $zip -Force
+          Write-Host "Bundled mediamtx.exe ($([math]::Round((Get-Item $dest).Length/1MB,1)) MB)"
+
       - name: Build Inno Setup installer
         shell: pwsh
         run: |
@@ -244,7 +273,7 @@ jobs:
 
             **Portable:** Download the zip, extract it anywhere, and run `RTMPProjector.exe`.
 
-            On first launch, MediaMTX (~10 MB) is downloaded automatically.
+            MediaMTX is bundled — no separate download needed.
 
             ### Requirements
             - Windows 10 / 11 x64

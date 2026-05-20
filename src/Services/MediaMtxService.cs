@@ -15,7 +15,11 @@ public class MediaMtxService : IAsyncDisposable
     private static readonly string AppDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RTMPProjector");
 
-    private static readonly string MtxExePath    = Path.Combine(AppDir, MtxExeName);
+    // Check the app's install directory first (bundled by the installer), then AppData
+    private static string MtxExePath =>
+        File.Exists(Path.Combine(AppContext.BaseDirectory, MtxExeName))
+            ? Path.Combine(AppContext.BaseDirectory, MtxExeName)
+            : Path.Combine(AppDir, MtxExeName);
     private static readonly string MtxConfigPath = Path.Combine(AppDir, "mediamtx.yml");
     private static readonly string MtxLogPath    = Path.Combine(AppDir, "mediamtx.log");
 
