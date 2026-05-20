@@ -59,40 +59,22 @@ public partial class ProjectionWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Clear log from previous attempt
         try { File.Delete(VlcLogPath); } catch { }
 
-        var vlcDir     = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
-        var pluginsDir = Path.Combine(vlcDir, "plugins");
-
-        VlcLog($"BaseDirectory : {AppContext.BaseDirectory}");
-        VlcLog($"vlcDir        : {vlcDir}");
-        VlcLog($"vlcDir exists : {Directory.Exists(vlcDir)}");
-
-        // Dump everything inside libvlc\win-x64 so we can see exactly what was packaged
-        if (Directory.Exists(vlcDir))
-        {
-            foreach (var f in Directory.GetFiles(vlcDir, "*", SearchOption.AllDirectories))
-                VlcLog($"  FILE: {f.Substring(vlcDir.Length)}");
-        }
-        else
-        {
-            VlcLog("  (directory does not exist)");
-        }
-
-        var pluginDlls = Directory.Exists(pluginsDir)
-            ? Directory.GetFiles(pluginsDir, "*.dll", SearchOption.AllDirectories)
-            : [];
-        VlcLog($"Plugin DLLs (recursive): {pluginDlls.Length}");
+        var vlcDir = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
+        VlcLog($"vlcDir: {vlcDir}  exists: {Directory.Exists(vlcDir)}");
 
         try
         {
-            VlcLog("Calling Core.Initialize...");
             Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
             VlcLog("Core.Initialize OK");
 
-            if (_libVlc == null)
-                _libVlc = TryCreateLibVlc(pluginsDir);
+            // Do NOT pass --network-caching / --live-caching / --rtmp-caching here.
+            // Those are per-media options (prefixed ':') that belong on the Media
+            // object. Passing them to the LibVLC constructor causes libvlc_new()
+            // to return NULL in VLC 3.0.21 with this package layout.
+            _libVlc ??= new LibVLC(enableDebugLogs: false);
+            VlcLog("LibVLC created OK");
 
             _player = new MediaPlayer(_libVlc);
 
@@ -113,78 +95,27 @@ public partial class ProjectionWindow : Window
         catch (Exception ex)
         {
             VlcLog($"EXCEPTION: {ex.GetType().Name}: {ex.Message}");
-            if (ex.InnerException != null) VlcLog($"  InnerException: {ex.InnerException.Message}");
 
             var hasDll  = File.Exists(Path.Combine(vlcDir, "libvlc.dll"));
             var hasCore = File.Exists(Path.Combine(vlcDir, "libvlccore.dll"));
 
             WaitingUrlLabel.Text = hasDll
                 ? $"VLC failed to load.\n\n" +
-                  $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}  " +
-                  $"plugins/ {(pluginDlls.Length > 0 ? $"✓ ({pluginDlls.Length} DLLs)" : "✗ (0 DLLs)")}\n\n" +
-                  $"Detail: {ex.Message}\n\n" +
-                  $"Full log: {VlcLogPath}"
-                : $"libvlc DLLs missing from:\n{vlcDir}\n\n" +
-                  $"Re-download the release and make sure the libvlc folder is next to RTMPProjector.exe.\n\n" +
-                  $"Full log: {VlcLogPath}";
+                  $"libvlc.dll ✓  libvlccore.dll {(hasCore ? "✓" : "✗")}\n\n" +
+                  $"Detail: {ex.Message}\n\nLog: {VlcLogPath}"
+                : $"VLC DLLs missing from:\n{vlcDir}\n\n" +
+                  $"Re-download the release.\n\nLog: {VlcLogPath}";
         }
-    }
-
-    // VLC's libvlc_new() can return NULL for several reasons even when all DLLs
-    // are present: corrupt plugin cache left by a previous failed launch, or the
-    // internal argument parser mishandling paths with spaces in --plugin-path.
-    // Try strategies in order and return the first that works.
-    private static LibVLC TryCreateLibVlc(string pluginsDir)
-    {
-        // pluginsDir forward-slash variant (VLC's parser can mishandle backslashes
-        // embedded in --option=value strings on some versions)
-        var pluginsFwd = pluginsDir.Replace('\\', '/');
-
-        // Each inner array is one attempt. --reset-plugins-cache forces VLC to
-        // regenerate %APPDATA%\vlc\plugins.dat, fixing corrupt cache from
-        // previous failed launches.
-        string[][] strategies =
-        [
-            // 1. No explicit path — VLC auto-discovers plugins via GetModuleFileName
-            //    on libvlccore.dll. Force cache reset in case of prior corruption.
-            ["--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
-
-            // 2. Explicit path with forward slashes + cache reset
-            [$"--plugin-path={pluginsFwd}", "--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
-
-            // 3. Explicit path with backslashes + cache reset (original approach)
-            [$"--plugin-path={pluginsDir}", "--reset-plugins-cache", "--network-caching=150", "--live-caching=150", "--rtmp-caching=150", "--no-video-title-show"],
-
-            // 4. Minimal — no caching args, no plugin path, just reset cache
-            ["--reset-plugins-cache"],
-
-            // 5. Truly minimal — nothing at all
-            [],
-        ];
-
-        Exception? last = null;
-        foreach (var opts in strategies)
-        {
-            VlcLog($"[Strategy {Array.IndexOf(strategies, opts) + 1}] {(opts.Length == 0 ? "(no options)" : string.Join(" ", opts))}");
-            try
-            {
-                var instance = new LibVLC(enableDebugLogs: false, opts);
-                VlcLog($"  → OK");
-                return instance;
-            }
-            catch (Exception ex)
-            {
-                VlcLog($"  → FAILED: {ex.Message}");
-                last = ex;
-            }
-        }
-        throw last!;
     }
 
     private void BeginPlay()
     {
         _media?.Dispose();
-        _media = new LibVLCSharp.Shared.Media(_libVlc!, _rtmpUrl, FromType.FromLocation);
+        // Caching options are per-media (prefixed ':'), not global LibVLC args.
+        _media = new LibVLCSharp.Shared.Media(_libVlc!, _rtmpUrl, FromType.FromLocation,
+            ":network-caching=150",
+            ":live-caching=150",
+            ":rtmp-caching=150");
         _player!.Play(_media);
     }
 
