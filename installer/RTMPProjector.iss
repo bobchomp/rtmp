@@ -49,4 +49,4 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Registry]
 ; Store install dir so the updater can pass it as /DIR= next time
-Root: HKCU; Subkey: "Software\RTMPProjector"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletesubkey
+Root: HKCU; Subkey: "Software\RTMPProjector"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
