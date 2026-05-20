@@ -10,6 +10,8 @@ public class UpdateInfo
     public string ReleaseNotes { get; init; } = "";
     public string ReleaseUrl { get; init; } = "";
 
+    public bool IsInstaller { get; init; }   // true = Setup.exe, false = zip
+
     public string SizeMb => $"{SizeBytes / 1_048_576.0:F1} MB";
 }
 

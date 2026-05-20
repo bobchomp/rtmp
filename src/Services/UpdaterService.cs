@@ -78,29 +78,39 @@ public class UpdaterService
 
             LogMessage?.Invoke($"[Updater] Update available: v{latestVersion} (current: v{_currentVersion})");
 
-            // Find the Windows zip asset (exclude .blockmap etc.)
+            // Prefer a Setup.exe installer asset; fall back to the zip.
             UpdateInfo? info = null;
             if (root.TryGetProperty("assets", out var assets))
             {
+                System.Text.Json.JsonElement? setupAsset = null;
+                System.Text.Json.JsonElement? zipAsset   = null;
+
                 foreach (var asset in assets.EnumerateArray())
                 {
                     var name = asset.GetProperty("name").GetString() ?? "";
-                    if (!name.EndsWith("-win-x64.zip", StringComparison.OrdinalIgnoreCase))
-                        continue;
+                    if (name.EndsWith("-Setup.exe", StringComparison.OrdinalIgnoreCase) && setupAsset == null)
+                        setupAsset = asset;
+                    else if (name.EndsWith("-win-x64.zip", StringComparison.OrdinalIgnoreCase) && zipAsset == null)
+                        zipAsset = asset;
+                }
 
+                var chosen = setupAsset ?? zipAsset;
+                if (chosen is System.Text.Json.JsonElement a)
+                {
+                    var name = a.GetProperty("name").GetString() ?? "";
                     info = new UpdateInfo
                     {
                         Version        = latestVersion,
                         CurrentVersion = _currentVersion,
                         AssetName      = name,
-                        DownloadUrl    = asset.GetProperty("browser_download_url").GetString() ?? "",
-                        SizeBytes      = asset.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0,
+                        DownloadUrl    = a.GetProperty("browser_download_url").GetString() ?? "",
+                        SizeBytes      = a.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0,
                         ReleaseNotes   = root.TryGetProperty("body", out var body)
                                              ? body.GetString() ?? "" : "",
                         ReleaseUrl     = root.TryGetProperty("html_url", out var url)
-                                             ? url.GetString() ?? "" : ""
+                                             ? url.GetString() ?? "" : "",
+                        IsInstaller    = setupAsset != null
                     };
-                    break;
                 }
             }
 
@@ -181,12 +191,45 @@ public class UpdaterService
         }
     }
 
-    // ── Install (PowerShell replaces files while app is closed) ───────────
+    // ── Install ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Equivalent to openInstaller() in the Electron version.
-    /// Writes a PowerShell script that waits for this process to exit,
-    /// extracts the new zip over the app directory, then restarts the app.
+    /// Launches the Inno Setup installer silently. It closes the running app
+    /// automatically (/CLOSEAPPLICATIONS) and restarts it after installation.
+    /// The caller should call Application.Current.Shutdown() shortly after.
+    /// </summary>
+    public void LaunchSetupInstaller(string setupPath)
+    {
+        var appDir = Path.GetDirectoryName(
+            Process.GetCurrentProcess().MainModule?.FileName ?? AppContext.BaseDirectory)
+            ?? AppContext.BaseDirectory;
+
+        // Read the registry install dir in case the user chose a custom location
+        var registryDir = ReadInstallDirFromRegistry();
+        var installDir  = registryDir ?? appDir;
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName  = setupPath,
+            Arguments = $"/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /NOCANCEL /DIR=\"{installDir}\"",
+            UseShellExecute = true
+        });
+    }
+
+    private static string? ReadInstallDirFromRegistry()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser
+                .OpenSubKey(@"Software\RTMPProjector");
+            return key?.GetValue("InstallDir") as string;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Legacy zip-based update: writes a PowerShell script that waits for this
+    /// process to exit, extracts the new zip over the app directory, then restarts.
     /// The caller should call Application.Current.Shutdown() shortly after.
     /// </summary>
     public void LaunchUpdateScript(string zipPath)
