@@ -32,6 +32,9 @@ public class UpdaterService
 
     public string CurrentVersion => _currentVersion;
 
+    public static string InstallLogPath =>
+        Path.Combine(Path.GetTempPath(), "rtmprojector_update.log");
+
     public UpdaterService(string currentVersion)
     {
         // Strip leading 'v' and any +build-metadata suffix (e.g. "1.2.5+abc1234")
@@ -220,9 +223,10 @@ public class UpdaterService
                 $count = (Get-ChildItem $tmp -Recurse -File).Count
                 Log "Extracted $count files to $tmp"
 
-                # Robocopy: mirror temp dir over app dir (handles any remaining locks gracefully)
-                $rc = robocopy $tmp $dir /E /IS /IT /NP /NFL /NDL /NJH /NJS
+                # Robocopy: mirror temp dir over app dir (quote paths — handles spaces in dir names)
+                $rc = robocopy "$tmp" "$dir" /E /IS /IT /NP /NFL /NDL /NJH /NJS
                 Log "Robocopy exit code: $LASTEXITCODE (0-7 = success)"
+                if ($LASTEXITCODE -gt 7) { Log "WARNING: robocopy returned $LASTEXITCODE — some files may not have been copied" }
 
                 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
             } catch {
