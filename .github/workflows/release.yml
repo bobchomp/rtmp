@@ -2,8 +2,8 @@ name: Build & Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]        # auto-release when Version in .csproj changes
+    tags: ['v*']            # still works if you push a tag manually
   workflow_dispatch:
     inputs:
       version:
@@ -15,7 +15,48 @@ permissions:
   contents: write
 
 jobs:
+  # ── 1. Determine version and decide whether to release ───────────────────
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag:            ${{ steps.ver.outputs.tag }}
+      nuget_version:  ${{ steps.ver.outputs.nuget_version }}
+      should_release: ${{ steps.ver.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            # Push to main — read version from the .csproj
+            VERSION=$(grep -oP '(?<=<Version>)[^<]+' src/RTMPProjector.csproj | head -1)
+            TAG="v${VERSION}"
+          fi
+
+          echo "tag=$TAG"             >> $GITHUB_OUTPUT
+          echo "nuget_version=${TAG#v}" >> $GITHUB_OUTPUT
+
+          # Skip the build if a release for this tag already exists
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+          if [ "$STATUS" = "200" ]; then
+            echo "Release ${TAG} already exists — nothing to do."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "New release: ${TAG}"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ── 2. Build and publish (only when there is something new to release) ───
   build:
+    needs: version
+    if: needs.version.outputs.should_release == 'true'
     runs-on: windows-latest
 
     steps:
@@ -27,25 +68,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Determine version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.version }}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "nuget_version=${TAG#v}" >> $GITHUB_OUTPUT
-
       - name: Publish (self-contained, win-x64)
         run: |
           dotnet publish src/RTMPProjector.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
-            -p:Version=${{ steps.version.outputs.nuget_version }} `
+            -p:Version=${{ needs.version.outputs.nuget_version }} `
             -o publish/
 
       - name: Ensure VLC native libs in publish output
@@ -53,7 +82,6 @@ jobs:
         run: |
           $dest       = "publish\libvlc\win-x64"
           $pluginsDir = "$dest\plugins"
-          # -Recurse so plugins in subdirectories (access\, codec\, etc.) are counted
           $pluginCount = if (Test-Path $pluginsDir) { (Get-ChildItem $pluginsDir -Recurse -Filter "*.dll").Count } else { 0 }
           $hasLibvlc  = Test-Path "$dest\libvlc.dll"
 
@@ -94,7 +122,6 @@ jobs:
               Write-Host "NuGet root: '$nugetRoot'"
 
               if ($nugetRoot -and (Test-Path $nugetRoot)) {
-                # Case-insensitive glob — package dir may be lowercased
                 $pkgDir = Get-ChildItem $nugetRoot -Filter "videolan.libvlc.windows" `
                             -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($pkgDir) {
@@ -142,18 +169,13 @@ jobs:
 
             Write-Host "Copying VLC from: $vlcSrc"
             New-Item -ItemType Directory -Force $dest | Out-Null
-            # Use robocopy instead of Copy-Item: the wildcard+recurse form of Copy-Item
-            # has a known PowerShell bug where it creates subdirs but skips their contents.
-            # Robocopy /E copies the full tree reliably; exit codes 0-7 all mean success.
             $rc = (robocopy $vlcSrc $dest /E /IS /IT /NP /NFL /NDL /NJH /NJS)
             if ($LASTEXITCODE -gt 7) { Write-Error "robocopy failed ($LASTEXITCODE)"; exit 1 }
           }
 
-          # Clean up hint files — not part of the app
-          Remove-Item "publish\vlc-pkg-root.txt"   -ErrorAction SilentlyContinue
-          Remove-Item "publish\vlc-native-root.txt" -ErrorAction SilentlyContinue
+          Remove-Item "publish\vlc-pkg-root.txt"    -ErrorAction SilentlyContinue
+          Remove-Item "publish\vlc-native-root.txt"  -ErrorAction SilentlyContinue
 
-          # Always print final tree so CI logs show exactly what goes into the zip
           Write-Host "`nlibvlc\win-x64 tree:"
           Get-ChildItem $dest -Recurse | ForEach-Object {
             $rel = $_.FullName.Substring((Resolve-Path $dest).Path.Length + 1)
@@ -163,13 +185,9 @@ jobs:
       - name: Bundle VC++ runtime DLLs with VLC
         shell: pwsh
         run: |
-          # VLC's native DLLs are compiled with MSVC and require the VC++ runtime.
-          # Use vswhere to locate VS, then copy from the Redist folder (licensed
-          # for redistribution) so users don't need the VC++ Redistributable.
           $dest = "publish\libvlc\win-x64"
           $needed = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
 
-          # Locate VS installation via vswhere
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsRoot = & $vswhere -latest -property installationPath 2>$null
           $redistRoot = if ($vsRoot) { Join-Path $vsRoot "VC\Redist\MSVC" } else { $null }
@@ -178,7 +196,6 @@ jobs:
             if (Test-Path "$dest\$dll") {
               Write-Host "$dll already present — skipping"; continue
             }
-            # Try Redist folder first (most reliable), then fall back to a broader search
             $src = $null
             if ($redistRoot -and (Test-Path $redistRoot)) {
               $src = Get-ChildItem $redistRoot -Recurse -Filter $dll -ErrorAction SilentlyContinue |
@@ -240,33 +257,32 @@ jobs:
           }
           Write-Host "ISCC: $iscc"
           & $iscc `
-            "/DAppVersion=${{ steps.version.outputs.nuget_version }}" `
+            "/DAppVersion=${{ needs.version.outputs.nuget_version }}" `
             "installer\RTMPProjector.iss"
           if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed ($LASTEXITCODE)"; exit 1 }
-          # ISCC writes to the OutputDir in the .iss (installer\), rename to include tag
-          $src = "installer\RTMPProjector-${{ steps.version.outputs.nuget_version }}-Setup.exe"
-          $dst = "RTMPProjector-${{ steps.version.outputs.tag }}-Setup.exe"
+          $src = "installer\RTMPProjector-${{ needs.version.outputs.nuget_version }}-Setup.exe"
+          $dst = "RTMPProjector-${{ needs.version.outputs.tag }}-Setup.exe"
           Move-Item $src $dst
           Write-Host "Installer: $dst  ($('{0:F1}' -f ((Get-Item $dst).Length / 1MB)) MB)"
 
       - name: Zip release
         shell: pwsh
         run: |
-          Compress-Archive -Path publish\* -DestinationPath RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
+          Compress-Archive -Path publish\* -DestinationPath RTMPProjector-${{ needs.version.outputs.tag }}-win-x64.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: RTMP Projector ${{ steps.version.outputs.tag }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: RTMP Projector ${{ needs.version.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
           files: |
-            RTMPProjector-${{ steps.version.outputs.tag }}-Setup.exe
-            RTMPProjector-${{ steps.version.outputs.tag }}-win-x64.zip
+            RTMPProjector-${{ needs.version.outputs.tag }}-Setup.exe
+            RTMPProjector-${{ needs.version.outputs.tag }}-win-x64.zip
           body: |
-            ## RTMP Projector ${{ steps.version.outputs.tag }}
+            ## RTMP Projector ${{ needs.version.outputs.tag }}
 
             ### Installation
             **Recommended:** Download `RTMPProjector-*-Setup.exe` — runs the installer, lets you pick the install folder, adds a Start Menu shortcut, and registers an uninstaller.
