@@ -19,6 +19,11 @@ public partial class ProjectionWindow : Window
     private readonly string _rtmpUrl;
     private readonly DispatcherTimer _hudTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
+    // Feature 1: Auto-reconnect state
+    private bool _isClosingIntentionally;
+    private readonly DispatcherTimer _reconnectTimer;
+    private int _reconnectAttempts;
+
     public StreamKey? CurrentKey { get; }
 
     public ProjectionWindow(string rtmpUrl, StreamKey key, WinForms.Screen? monitor = null)
@@ -36,6 +41,10 @@ public partial class ProjectionWindow : Window
 
         _hudTimer.Tick += (_, _) => FadeHud(false);
         _hudTimer.Start();
+
+        // Feature 1: Configure reconnect timer (interval set dynamically)
+        _reconnectTimer = new DispatcherTimer();
+        _reconnectTimer.Tick += OnReconnectTick;
 
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -78,9 +87,30 @@ public partial class ProjectionWindow : Window
 
             _player = new MediaPlayer(_libVlc);
 
-            _player.Playing    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Collapsed);
-            _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
-            _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() => WaitingPanel.Visibility = Visibility.Visible);
+            _player.Playing += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                WaitingPanel.Visibility = Visibility.Collapsed;
+                // Feature 1: Reset reconnect state on successful play
+                _reconnectTimer.Stop();
+                _reconnectAttempts = 0;
+                StreamNameLabel.Text = $"LIVE  ·  {CurrentKey?.Name}";
+            });
+
+            _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                WaitingPanel.Visibility = Visibility.Visible;
+                // Feature 1: Start reconnect if not intentionally closing
+                if (!_isClosingIntentionally)
+                    StartReconnect();
+            });
+
+            _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                WaitingPanel.Visibility = Visibility.Visible;
+                // Feature 1: Start reconnect if not intentionally closing
+                if (!_isClosingIntentionally)
+                    StartReconnect();
+            });
 
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
             {
@@ -119,16 +149,39 @@ public partial class ProjectionWindow : Window
         _player!.Play(_media);
     }
 
+    // ── Feature 1: Auto-reconnect ──────────────────────────────────────────
+
+    private void StartReconnect()
+    {
+        if (_isClosingIntentionally) return;
+        _reconnectAttempts++;
+        var intervalSeconds = Math.Min(30, 3 * _reconnectAttempts);
+        _reconnectTimer.Interval = TimeSpan.FromSeconds(intervalSeconds);
+        _reconnectTimer.Start();
+        StreamNameLabel.Text = $"Reconnecting… (attempt {_reconnectAttempts})";
+    }
+
+    private void OnReconnectTick(object? sender, EventArgs e)
+    {
+        _reconnectTimer.Stop();
+        if (_isClosingIntentionally) return;
+        BeginPlay();
+    }
+
     // ── Cleanup ────────────────────────────────────────────────────────────
 
     public void StopPlayback()
     {
+        _isClosingIntentionally = true;
+        _reconnectTimer.Stop();
         _player?.Stop();
         WaitingPanel.Visibility = Visibility.Visible;
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _isClosingIntentionally = true;
+        _reconnectTimer.Stop();
         _hudTimer.Stop();
         _player?.Stop();
         _player?.Dispose();
@@ -182,12 +235,27 @@ public partial class ProjectionWindow : Window
         switch (e.Key)
         {
             case Key.Escape:
+                _isClosingIntentionally = true;
                 Close();
                 break;
             case Key.F:
                 ToggleFullscreen();
                 break;
+            case Key.M:
+                // Feature 9: Mute/unmute
+                if (_player != null)
+                {
+                    _player.Mute = !_player.Mute;
+                    ShowMuteBadge(_player.Mute);
+                }
+                break;
         }
+    }
+
+    // Feature 9: Show/hide mute badge
+    private void ShowMuteBadge(bool muted)
+    {
+        MuteBadge.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private bool _isFullBorderless = true;
@@ -214,5 +282,9 @@ public partial class ProjectionWindow : Window
 
     // ── Buttons ────────────────────────────────────────────────────────────
 
-    private void StopBtn_Click(object sender, RoutedEventArgs e) => Close();
+    private void StopBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isClosingIntentionally = true;
+        Close();
+    }
 }

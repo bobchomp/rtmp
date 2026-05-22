@@ -1,9 +1,13 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Forms;
+using System.Windows.Threading;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
 
@@ -114,6 +118,46 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    // ── Feature 6: Disk space ─────────────────────────────────────────────────
+
+    private string _diskSpaceText = "";
+    public string DiskSpaceText
+    {
+        get => _diskSpaceText;
+        set { _diskSpaceText = value; OnPropertyChanged(); }
+    }
+
+    private bool _diskSpaceIsLow;
+    public bool DiskSpaceIsLow
+    {
+        get => _diskSpaceIsLow;
+        set { _diskSpaceIsLow = value; OnPropertyChanged(); }
+    }
+
+    private readonly DispatcherTimer _diskTimer;
+
+    private void RefreshDiskSpace()
+    {
+        try
+        {
+            var path = Settings.RecordingPath;
+            if (string.IsNullOrEmpty(path)) { DiskSpaceText = ""; return; }
+
+            var root = Path.GetPathRoot(path);
+            if (string.IsNullOrEmpty(root)) { DiskSpaceText = ""; return; }
+
+            var drive = new DriveInfo(root);
+            var freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+            DiskSpaceText = $"{freeGb:F1} GB free";
+            DiskSpaceIsLow = freeGb < 5.0;
+        }
+        catch
+        {
+            DiskSpaceText = "";
+            DiskSpaceIsLow = false;
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     public RelayCommand ToggleServerCommand { get; }
@@ -123,6 +167,12 @@ public class MainViewModel : INotifyPropertyChanged
     public RelayCommand BrowseRecordingPathCommand { get; }
     public RelayCommand SaveSettingsCommand { get; }
     public RelayCommand OpenProjectionCommand { get; }
+
+    // Feature 5: Open recordings folder
+    public RelayCommand OpenRecordingsFolderCommand { get; }
+
+    // Feature 10: Toggle theme
+    public RelayCommand ToggleThemeCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -155,12 +205,34 @@ public class MainViewModel : INotifyPropertyChanged
                 OpenProjectionRequested?.Invoke(key);
             });
 
+        // Feature 5: Open recordings folder command
+        OpenRecordingsFolderCommand = new RelayCommand(
+            _ =>
+            {
+                var p = Settings.RecordingPath;
+                if (!string.IsNullOrEmpty(p) && Directory.Exists(p))
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", p) { UseShellExecute = true });
+                }
+            },
+            _ => !string.IsNullOrEmpty(Settings.RecordingPath) && Directory.Exists(Settings.RecordingPath));
+
+        // Feature 10: Toggle theme command
+        ToggleThemeCommand = new RelayCommand(_ =>
+        {
+            var newTheme = Settings.Theme == "Dark" ? "Light" : "Dark";
+            (System.Windows.Application.Current as App)?.ApplyTheme(newTheme);
+            Settings.Theme = newTheme;
+            _settingsService.Save();
+            OnPropertyChanged(nameof(Settings));
+        });
+
         _mediaMtx.LogMessage += msg => UIInvoke(() => AppendLog(msg));
         _monitor.LogMessage  += msg => UIInvoke(() => AppendLog(msg));
 
         _monitor.StreamStarted += key => UIInvoke(() =>
         {
-            RefreshKeyActiveState();
+            // StreamKey.IsActive was already set in the monitor — INPC fires automatically
             StatusMessage = $"Stream connected: {key.RtmpPath}";
             AppendLog($"Stream STARTED — path: {key.RtmpPath}  name: {key.Name}");
             StreamBecameActive?.Invoke(key);
@@ -168,12 +240,18 @@ public class MainViewModel : INotifyPropertyChanged
 
         _monitor.StreamStopped += key => UIInvoke(() =>
         {
-            RefreshKeyActiveState();
+            // StreamKey.IsActive was already cleared in the monitor — INPC fires automatically
             StatusMessage = IsServerRunning
                 ? $"Server running — RTMP port {Settings.RtmpPort}"
                 : "Server stopped.";
             StreamBecameInactive?.Invoke(key);
         });
+
+        // Feature 6: Disk space timer
+        _diskTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _diskTimer.Tick += (_, _) => RefreshDiskSpace();
+        _diskTimer.Start();
+        RefreshDiskSpace();
 
         RefreshMonitors();
         SyncStreamKeys();
@@ -308,6 +386,7 @@ public class MainViewModel : INotifyPropertyChanged
             Settings.RecordingPath = dlg.SelectedPath;
             OnPropertyChanged(nameof(Settings));
             _settingsService.Save();
+            RefreshDiskSpace(); // Feature 6: refresh after path change
         }
     }
 
@@ -322,18 +401,23 @@ public class MainViewModel : INotifyPropertyChanged
 
         _settingsService.Save();
         StatusMessage = "Settings saved.";
+        RefreshDiskSpace(); // Feature 6: refresh on save
 
         if (IsServerRunning)
             _ = _mediaMtx.RestartAsync(Settings);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private void RefreshKeyActiveState()
+    // Feature 8: Save window bounds
+    public void SaveWindowBounds(double l, double t, double w, double h)
     {
-        foreach (var key in StreamKeys)
-            OnPropertyChanged(nameof(key.IsActive)); // triggers UI update via binding
+        Settings.WindowLeft   = l;
+        Settings.WindowTop    = t;
+        Settings.WindowWidth  = w;
+        Settings.WindowHeight = h;
+        _settingsService.Save();
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     public string BuildRtmpUrl(StreamKey key) =>
         $"rtmp://localhost:{Settings.RtmpPort}/{key.RtmpPath}";

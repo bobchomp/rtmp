@@ -71,12 +71,22 @@
                 </Button>
             </StackPanel>
 
-            <!-- Keyboard hint -->
-            <TextBlock Text="ESC — close   ·   F — toggle fullscreen"
+            <!-- Feature 9: Keyboard hint updated with M — mute -->
+            <TextBlock x:Name="KeyboardHintLabel"
+                       Text="ESC — close   ·   F — toggle fullscreen   ·   M — mute"
                        Foreground="#99FFFFFF" FontSize="11"
                        HorizontalAlignment="Right" VerticalAlignment="Top"
                        Margin="0,22,20,0"/>
         </Grid>
+
+        <!-- Feature 9: Mute badge — bottom center, shown when muted -->
+        <Border x:Name="MuteBadge"
+                Background="#AA000000" CornerRadius="4" Padding="10,4"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,40"
+                Visibility="Collapsed">
+            <TextBlock Text="🔇  MUTED" Foreground="White" FontSize="14"/>
+        </Border>
 
         <!-- "Waiting for stream" placeholder shown when not yet playing -->
         <StackPanel x:Name="WaitingPanel" HorizontalAlignment="Center" VerticalAlignment="Center"

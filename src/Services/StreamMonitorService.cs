@@ -68,7 +68,7 @@ public class StreamMonitorService : IAsyncDisposable
                         {
                             currentPaths.Add(pathName);
 
-                            // Try to extract bytesReceived from the source or from the item itself
+                            // Try to extract bytesReceived from the item
                             long bytesReceived = 0;
                             if (item.TryGetProperty("bytesReceived", out var br))
                                 bytesReceived = br.GetInt64();
@@ -88,9 +88,9 @@ public class StreamMonitorService : IAsyncDisposable
                     }
                 }
 
-                // Feature 2: Only log on state changes (not every poll)
+                // Only log on state changes (not every poll)
                 // Fire started events for newly active paths
-                foreach (var path in currentPaths.Except(_activePaths))
+                foreach (var path in currentPaths.Except(_activePaths).ToList())
                 {
                     var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == path)
                               ?? new StreamKey
@@ -106,7 +106,7 @@ public class StreamMonitorService : IAsyncDisposable
                 }
 
                 // Fire stopped events for paths that went offline
-                foreach (var path in _activePaths.Except(currentPaths))
+                foreach (var path in _activePaths.Except(currentPaths).ToList())
                 {
                     var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == path);
                     if (key != null)

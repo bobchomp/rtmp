@@ -10,7 +10,14 @@ public enum StreamHealthState { Offline, Good, Degraded, Poor }
 public class StreamKey : INotifyPropertyChanged
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
-    public string Name { get; set; } = "Stream";
+
+    private string _name = "Stream";
+    public string Name
+    {
+        get => _name;
+        set { _name = value; OnPropertyChanged(); }
+    }
+
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
 
     /// Set by StreamMonitorService for paths that don't match any configured key.

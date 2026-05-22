@@ -1,0 +1,102 @@
+<Window x:Class="RTMPProjector.Windows.FirstRunWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to RTMP Projector"
+        Width="480" Height="400"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgDeep}">
+
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── PAGE 1: Welcome + Port ── -->
+        <StackPanel x:Name="Page1" Grid.Row="0">
+            <TextBlock Text="Welcome to RTMP Projector"
+                       Foreground="{DynamicResource TextPrim}"
+                       FontSize="22" FontWeight="Bold"
+                       Margin="0,0,0,12"/>
+
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="13" Margin="0,0,0,24">
+                RTMP Projector captures live streams from OBS or any RTMP encoder and
+                displays them fullscreen on a second monitor — perfect for live events
+                and broadcast setups. Let's get you set up in two quick steps.
+            </TextBlock>
+
+            <TextBlock Text="RTMP Port"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="12" Margin="0,0,0,6"/>
+            <TextBox x:Name="PortBox" Text="1935" FontSize="14"
+                     FontFamily="Consolas" Margin="0,0,0,8"/>
+            <TextBlock x:Name="PortErrorLabel"
+                       Foreground="{DynamicResource Danger}"
+                       FontSize="12" Visibility="Collapsed"
+                       Margin="0,0,0,8"/>
+
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="11">
+                Port 1935 is the standard RTMP port. Only change it if you have a
+                conflict with another application.
+            </TextBlock>
+        </StackPanel>
+
+        <!-- ── PAGE 2: Create first stream key ── -->
+        <StackPanel x:Name="Page2" Grid.Row="0" Visibility="Collapsed">
+            <TextBlock Text="Create Your First Stream Key"
+                       Foreground="{DynamicResource TextPrim}"
+                       FontSize="22" FontWeight="Bold"
+                       Margin="0,0,0,12"/>
+
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="13" Margin="0,0,0,20">
+                Give your stream a name. Your encoder will use the URL below to connect.
+                You can add more stream keys later from the main window.
+            </TextBlock>
+
+            <TextBlock Text="Stream Name"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="12" Margin="0,0,0,6"/>
+            <TextBox x:Name="StreamNameBox" Text="My Stream" FontSize="14"
+                     Margin="0,0,0,16"/>
+
+            <TextBlock Text="YOUR RTMP URL"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="11" FontWeight="SemiBold"
+                       Margin="0,0,0,6"/>
+            <Border Background="{DynamicResource BgCard}" CornerRadius="5"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                    Padding="12,8" Margin="0,0,0,8">
+                <TextBlock x:Name="RtmpUrlLabel"
+                           FontFamily="Consolas" FontSize="12"
+                           Foreground="{DynamicResource Accent}"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="11">
+                Copy this URL into OBS → Settings → Stream → Server, and set the
+                stream key field to your stream key value.
+            </TextBlock>
+        </StackPanel>
+
+        <!-- ── Navigation buttons ── -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button x:Name="BackBtn" Content="← Back"
+                    Style="{StaticResource GhostBtn}"
+                    Visibility="Collapsed"
+                    Click="BackBtn_Click" Margin="0,0,8,0"/>
+            <Button x:Name="NextBtn" Content="Next →"
+                    Style="{StaticResource BaseBtn}"
+                    Click="NextBtn_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

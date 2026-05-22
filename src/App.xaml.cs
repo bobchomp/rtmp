@@ -1,10 +1,13 @@
 using System.IO;
+using System.Net.Sockets;
+using System.Net;
 using System.Reflection;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
 using RTMPProjector.ViewModels;
+using RTMPProjector.Windows;
 
 namespace RTMPProjector;
 
@@ -43,6 +46,33 @@ public partial class App : Application
         _settingsService = new SettingsService();
         _settingsService.Load();
 
+        // Feature 10: Apply theme from settings
+        ApplyTheme(_settingsService.Settings.Theme);
+
+        // Feature 7: First-run wizard
+        // If existing users already have stream keys, treat as completed
+        if (!_settingsService.Settings.FirstRunCompleted)
+        {
+            if (_settingsService.Settings.StreamKeys.Count > 0)
+            {
+                // Existing user — skip wizard
+                _settingsService.Settings.FirstRunCompleted = true;
+                _settingsService.Save();
+            }
+            else
+            {
+                var localIp = ResolveLocalIp();
+                var wizard = new FirstRunWizard(_settingsService, localIp);
+                wizard.ShowDialog();
+
+                if (!wizard.WasCompleted)
+                {
+                    Shutdown();
+                    return;
+                }
+            }
+        }
+
         _mediaMtx = new MediaMtxService();
         _monitor  = new StreamMonitorService();
 
@@ -64,6 +94,37 @@ public partial class App : Application
 
         if (_settingsService.Settings.AutoStartServer)
             _ = _viewModel.StartServerAsync();
+    }
+
+    // Feature 10: Theme switching
+    public void ApplyTheme(string theme)
+    {
+        var themeFile = theme == "Light" ? "Themes/Light.xaml" : "Themes/Dark.xaml";
+        var uri = new Uri($"pack://application:,,,/{themeFile}", UriKind.Absolute);
+        var dict = new ResourceDictionary { Source = uri };
+
+        if (Resources.MergedDictionaries.Count > 0)
+            Resources.MergedDictionaries[0] = dict;
+        else
+            Resources.MergedDictionaries.Add(dict);
+
+        if (_settingsService != null)
+        {
+            _settingsService.Settings.Theme = theme;
+        }
+    }
+
+    private static string ResolveLocalIp()
+    {
+        try
+        {
+            using var socket = new System.Net.Sockets.Socket(
+                System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Dgram, 0);
+            socket.Connect("8.8.8.8", 65530);
+            return (socket.LocalEndPoint as System.Net.IPEndPoint)?.Address.ToString() ?? "127.0.0.1";
+        }
+        catch { return "127.0.0.1"; }
     }
 
     // ── Updater (mirrors startUpdater + onUpdateAvailable in main.js) ─────
