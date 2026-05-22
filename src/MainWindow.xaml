@@ -182,7 +182,6 @@
                                                 <!-- Feature 3: Per-key copy button (visible on hover) -->
                                                 <Button Grid.Column="1"
                                                         Content="⎘" Padding="4,2" FontSize="11"
-                                                        Style="{StaticResource GhostBtn}"
                                                         Margin="4,0,0,0"
                                                         Command="{Binding DataContext.CopyRtmpUrlCommand,
                                                             RelativeSource={RelativeSource AncestorType=Window}}"
