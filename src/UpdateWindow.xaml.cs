@@ -102,12 +102,30 @@ public partial class UpdateWindow : Window
         _ = _updater.DownloadUpdateAsync(_info);
     }
 
+    private static void WriteWhatsNewFile(UpdateInfo? info)
+    {
+        if (info == null) return;
+        try
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rtmprojector_whatsnew.json");
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                version = info.Version,
+                notes   = info.ReleaseNotes
+            });
+            System.IO.File.WriteAllText(path, json);
+        }
+        catch { }
+    }
+
     private void BtnInstall_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_downloadedZipPath)) return;
 
         try
         {
+            WriteWhatsNewFile(_info);
+
             if (_info?.IsInstaller == true)
             {
                 _updater.LaunchSetupInstaller(_downloadedZipPath);

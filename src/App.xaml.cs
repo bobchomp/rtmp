@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Net;
 using System.Reflection;
+using System.Text.Json;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using RTMPProjector.Models;
@@ -48,6 +49,9 @@ public partial class App : Application
 
         // Feature 10: Apply theme from settings
         ApplyTheme(_settingsService.Settings.Theme);
+
+        // Show changelog if we just auto-updated
+        CheckAndShowWhatsNew();
 
         // Feature 7: First-run wizard
         // If existing users already have stream keys, treat as completed
@@ -112,6 +116,26 @@ public partial class App : Application
         {
             _settingsService.Settings.Theme = theme;
         }
+    }
+
+    private static void CheckAndShowWhatsNew()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "rtmprojector_whatsnew.json");
+        if (!File.Exists(path)) return;
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            File.Delete(path);
+
+            using var doc = JsonDocument.Parse(json);
+            var root    = doc.RootElement;
+            var version = root.GetProperty("version").GetString() ?? "";
+            var notes   = root.GetProperty("notes").GetString() ?? "";
+
+            new WhatsNewDialog(version, notes).ShowDialog();
+        }
+        catch { }
     }
 
     private static string ResolveLocalIp()
