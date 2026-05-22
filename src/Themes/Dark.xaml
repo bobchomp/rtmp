@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Dark theme colours -->
+    <SolidColorBrush x:Key="BgDeep"    Color="#0f1117"/>
+    <SolidColorBrush x:Key="BgPanel"   Color="#1a1d27"/>
+    <SolidColorBrush x:Key="BgCard"    Color="#22263a"/>
+    <SolidColorBrush x:Key="BgInput"   Color="#2a2f45"/>
+    <SolidColorBrush x:Key="BgHover"   Color="#343858"/>
+    <SolidColorBrush x:Key="Accent"    Color="#5865f2"/>
+    <SolidColorBrush x:Key="AccentHot" Color="#4752c4"/>
+    <SolidColorBrush x:Key="Success"   Color="#2ecc71"/>
+    <SolidColorBrush x:Key="Danger"    Color="#e74c3c"/>
+    <SolidColorBrush x:Key="TextPrim"  Color="#f0f0f8"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#8b8fa8"/>
+    <SolidColorBrush x:Key="Border"    Color="#333655"/>
+
+</ResourceDictionary>

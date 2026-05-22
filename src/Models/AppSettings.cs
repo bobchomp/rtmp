@@ -10,4 +10,16 @@ public class AppSettings
     public string RecordingPath { get; set; } = "";
     public bool StartMinimized { get; set; } = false;
     public bool AutoStartServer { get; set; } = false;
+
+    // Feature 7: First-run wizard
+    public bool FirstRunCompleted { get; set; } = false;
+
+    // Feature 8: Remember window position/size
+    public double WindowLeft { get; set; } = double.NaN;
+    public double WindowTop { get; set; } = double.NaN;
+    public double WindowWidth { get; set; } = 760;
+    public double WindowHeight { get; set; } = 620;
+
+    // Feature 10: Theme
+    public string Theme { get; set; } = "Dark";
 }
