@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using RTMPProjector.Models;
@@ -15,6 +16,12 @@ namespace RTMPProjector;
 
 public partial class App : Application
 {
+    private const string MutexName       = "RTMPProjector_SingleInstance";
+    private const string ActivateEvtName = "RTMPProjector_Activate";
+
+    // Held for the lifetime of the process — prevents GC from releasing the mutex.
+    private Mutex? _singleInstanceMutex;
+
     private TaskbarIcon? _trayIcon;
     private SettingsService? _settingsService;
     private MediaMtxService? _mediaMtx;
@@ -34,6 +41,26 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // ── Single-instance enforcement ───────────────────────────────────
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        if (!createdNew)
+        {
+            // Another instance is already running — signal it to show itself, then quit.
+            try { EventWaitHandle.OpenExisting(ActivateEvtName).Set(); } catch { }
+            _singleInstanceMutex.Dispose();
+            Shutdown();
+            return;
+        }
+
+        // Watch for activation signals from future instances on a background thread.
+        var activateEvent = new EventWaitHandle(
+            initialState: false, EventResetMode.AutoReset, ActivateEvtName);
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            while (activateEvent.WaitOne())
+                Dispatcher.BeginInvoke(ShowMainWindow);
+        });
 
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             WriteCrashLog(ex.ExceptionObject?.ToString() ?? "Unknown error");
@@ -396,6 +423,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
+        _singleInstanceMutex?.Dispose();
         base.OnExit(e);
     }
 
