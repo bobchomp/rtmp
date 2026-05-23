@@ -273,12 +273,12 @@ public partial class App : Application
 
         try
         {
-            // Extract the icon that is embedded in the exe itself (set via ApplicationIcon
-            // in the csproj). This guarantees the tray icon always matches the window icon
-            // and avoids any WPF resource-stream or Windows icon-cache mismatch.
-            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            if (!string.IsNullOrEmpty(exePath))
-                _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+            // Load the ICO directly from the embedded WPF resource, forcing 16×16 so
+            // Windows uses the correct small-size frame rather than scaling down a large one.
+            var iconUri = new Uri("pack://application:,,,/Assets/tray.ico");
+            using var stream = GetResourceStream(iconUri)?.Stream;
+            if (stream != null)
+                _trayIcon.Icon = new System.Drawing.Icon(stream, new System.Drawing.Size(16, 16));
         }
         catch { }
 
