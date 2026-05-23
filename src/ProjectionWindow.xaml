@@ -73,7 +73,7 @@
 
             <!-- Feature 9: Keyboard hint updated with M — mute -->
             <TextBlock x:Name="KeyboardHintLabel"
-                       Text="ESC — close   ·   F — toggle fullscreen   ·   M — mute"
+                       Text="ESC — close   ·   F — fullscreen   ·   M — mute   ·   Tab / 1–9 — switch stream"
                        Foreground="#99FFFFFF" FontSize="11"
                        HorizontalAlignment="Right" VerticalAlignment="Top"
                        Margin="0,22,20,0"/>

@@ -16,25 +16,42 @@ public partial class ProjectionWindow : Window
     private LibVLCSharp.Shared.Media? _media;
     private WinForms.Panel? _videoPanel;
 
-    private readonly string _rtmpUrl;
+    private string _rtmpUrl;
     private readonly DispatcherTimer _hudTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
-    // Feature 1: Auto-reconnect state
+    // Auto-reconnect state
     private bool _isClosingIntentionally;
+    private bool _isSwitching;
     private readonly DispatcherTimer _reconnectTimer;
     private int _reconnectAttempts;
 
-    public StreamKey? CurrentKey { get; }
+    // Stream switching
+    private StreamKey? _currentKey;
+    private readonly Func<StreamKey, string>? _buildRtmpUrl;
+    private readonly Func<IReadOnlyList<StreamKey>>? _getStreamKeys;
 
-    public ProjectionWindow(string rtmpUrl, StreamKey key, WinForms.Screen? monitor = null)
+    public StreamKey? CurrentKey => _currentKey;
+    public int MonitorIndex { get; private set; }
+
+    public ProjectionWindow(string rtmpUrl, StreamKey key, WinForms.Screen? monitor = null,
+        Func<StreamKey, string>? buildRtmpUrl = null,
+        Func<IReadOnlyList<StreamKey>>? getStreamKeys = null)
     {
         _rtmpUrl = rtmpUrl;
-        CurrentKey = key;
+        _currentKey = key;
+        _buildRtmpUrl = buildRtmpUrl;
+        _getStreamKeys = getStreamKeys;
+
+        // Resolve monitor index for multi-stream tracking
+        var allScreens = WinForms.Screen.AllScreens;
+        var resolvedScreen = monitor ?? (allScreens.Length > 1
+            ? allScreens.First(s => !s.Primary)
+            : allScreens[0]);
+        MonitorIndex = Array.IndexOf(allScreens, resolvedScreen);
+        if (MonitorIndex < 0) MonitorIndex = 0;
 
         InitializeComponent();
-
-        // Position on the requested monitor
-        PositionOnMonitor(monitor);
+        PositionOnMonitor(resolvedScreen);
 
         StreamNameLabel.Text = $"LIVE  ·  {key.Name}";
         WaitingUrlLabel.Text = rtmpUrl;
@@ -42,7 +59,6 @@ public partial class ProjectionWindow : Window
         _hudTimer.Tick += (_, _) => FadeHud(false);
         _hudTimer.Start();
 
-        // Feature 1: Configure reconnect timer (interval set dynamically)
         _reconnectTimer = new DispatcherTimer();
         _reconnectTimer.Tick += OnReconnectTick;
 
@@ -90,26 +106,23 @@ public partial class ProjectionWindow : Window
             _player.Playing += (_, _) => Dispatcher.BeginInvoke(() =>
             {
                 WaitingPanel.Visibility = Visibility.Collapsed;
-                // Feature 1: Reset reconnect state on successful play
                 _reconnectTimer.Stop();
                 _reconnectAttempts = 0;
-                StreamNameLabel.Text = $"LIVE  ·  {CurrentKey?.Name}";
+                StreamNameLabel.Text = $"LIVE  ·  {_currentKey?.Name}";
             });
 
-            _player.Stopped    += (_, _) => Dispatcher.BeginInvoke(() =>
+            _player.Stopped += (_, _) => Dispatcher.BeginInvoke(() =>
             {
                 WaitingPanel.Visibility = Visibility.Visible;
-                // Feature 1: Start reconnect if not intentionally closing
-                if (!_isClosingIntentionally)
-                    StartReconnect();
+                if (_isSwitching) { _isSwitching = false; BeginPlay(); return; }
+                if (!_isClosingIntentionally) StartReconnect();
             });
 
             _player.EndReached += (_, _) => Dispatcher.BeginInvoke(() =>
             {
                 WaitingPanel.Visibility = Visibility.Visible;
-                // Feature 1: Start reconnect if not intentionally closing
-                if (!_isClosingIntentionally)
-                    StartReconnect();
+                if (_isSwitching) { _isSwitching = false; BeginPlay(); return; }
+                if (!_isClosingIntentionally) StartReconnect();
             });
 
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
@@ -149,7 +162,7 @@ public partial class ProjectionWindow : Window
         _player!.Play(_media);
     }
 
-    // ── Feature 1: Auto-reconnect ──────────────────────────────────────────
+    // ── Auto-reconnect ─────────────────────────────────────────────────────
 
     private void StartReconnect()
     {
@@ -166,6 +179,41 @@ public partial class ProjectionWindow : Window
         _reconnectTimer.Stop();
         if (_isClosingIntentionally) return;
         BeginPlay();
+    }
+
+    // ── Stream switching ───────────────────────────────────────────────────
+
+    public void SwitchToStream(string rtmpUrl, StreamKey key)
+    {
+        _rtmpUrl = rtmpUrl;
+        _currentKey = key;
+        _reconnectTimer.Stop();
+        _reconnectAttempts = 0;
+        StreamNameLabel.Text = $"LIVE  ·  {key.Name}";
+        WaitingUrlLabel.Text = rtmpUrl;
+        WaitingPanel.Visibility = Visibility.Visible;
+        _isSwitching = true;
+        _player?.Stop(); // Stopped handler fires BeginPlay() when _isSwitching is true
+    }
+
+    private void CycleStream()
+    {
+        if (_buildRtmpUrl == null || _getStreamKeys == null) return;
+        var active = _getStreamKeys().Where(k => k.IsActive).ToList();
+        if (active.Count < 2) return;
+        var idx = _currentKey != null ? active.FindIndex(k => k.Key == _currentKey.Key) : -1;
+        var next = active[(idx + 1) % active.Count];
+        SwitchToStream(_buildRtmpUrl(next), next);
+    }
+
+    private void SwitchToStreamByIndex(int zeroBasedIndex)
+    {
+        if (_buildRtmpUrl == null || _getStreamKeys == null) return;
+        var active = _getStreamKeys().Where(k => k.IsActive).ToList();
+        if (zeroBasedIndex >= active.Count) return;
+        var next = active[zeroBasedIndex];
+        if (next.Key == _currentKey?.Key) return;
+        SwitchToStream(_buildRtmpUrl(next), next);
     }
 
     // ── Cleanup ────────────────────────────────────────────────────────────
@@ -206,9 +254,7 @@ public partial class ProjectionWindow : Window
         Width  = bounds.Width;
         Height = bounds.Height;
 
-        WindowState = WindowState.Normal; // must set position before maximising
-        // For borderless fullscreen, we manually size to the monitor rather than using Maximized
-        // (Maximized on a non-primary monitor with WindowStyle=None can cover the wrong display)
+        WindowState = WindowState.Normal;
     }
 
     // ── HUD fade ───────────────────────────────────────────────────────────
@@ -242,17 +288,28 @@ public partial class ProjectionWindow : Window
                 ToggleFullscreen();
                 break;
             case Key.M:
-                // Feature 9: Mute/unmute
                 if (_player != null)
                 {
                     _player.Mute = !_player.Mute;
                     ShowMuteBadge(_player.Mute);
                 }
                 break;
+            case Key.Tab:
+                CycleStream();
+                e.Handled = true;
+                break;
+            case Key.D1: SwitchToStreamByIndex(0); break;
+            case Key.D2: SwitchToStreamByIndex(1); break;
+            case Key.D3: SwitchToStreamByIndex(2); break;
+            case Key.D4: SwitchToStreamByIndex(3); break;
+            case Key.D5: SwitchToStreamByIndex(4); break;
+            case Key.D6: SwitchToStreamByIndex(5); break;
+            case Key.D7: SwitchToStreamByIndex(6); break;
+            case Key.D8: SwitchToStreamByIndex(7); break;
+            case Key.D9: SwitchToStreamByIndex(8); break;
         }
     }
 
-    // Feature 9: Show/hide mute badge
     private void ShowMuteBadge(bool muted)
     {
         MuteBadge.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
@@ -262,7 +319,6 @@ public partial class ProjectionWindow : Window
 
     private void ToggleFullscreen()
     {
-        // Already borderless — toggle to a normal resizable window and back
         if (_isFullBorderless)
         {
             WindowStyle = WindowStyle.SingleBorderWindow;

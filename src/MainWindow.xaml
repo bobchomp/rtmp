@@ -349,7 +349,23 @@
                                 <Separator/>
 
                                 <TextBlock Text="RECORDING" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
-                                <CheckBox Content="Record this stream" IsChecked="{Binding RecordEnabled}" Margin="0,0,0,12"/>
+                                <CheckBox Content="Record this stream" IsChecked="{Binding RecordEnabled}" Margin="0,0,0,8"/>
+                                <Button HorizontalAlignment="Left" Margin="0,0,0,12"
+                                        Command="{Binding DataContext.ToggleRecordingCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding DataContext.SelectedStreamKey, RelativeSource={RelativeSource AncestorType=Window}}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource BaseBtn}">
+                                            <Setter Property="Content" Value="● Start Recording"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.SelectedStreamKey.RecordEnabled,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                    <Setter Property="Content" Value="■ Stop Recording"/>
+                                                    <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
 
                                 <Separator/>
 
@@ -450,7 +466,10 @@
                                           IsChecked="{Binding Settings.StartMinimized}"
                                           Margin="0,0,0,8"/>
                                 <CheckBox Content="Automatically start the RTMP server on launch"
-                                          IsChecked="{Binding Settings.AutoStartServer}"/>
+                                          IsChecked="{Binding Settings.AutoStartServer}"
+                                          Margin="0,0,0,8"/>
+                                <CheckBox Content="Auto-start with Windows (minimised to tray)"
+                                          IsChecked="{Binding Settings.AutoStartWithWindows}"/>
                             </StackPanel>
                         </Border>
 
