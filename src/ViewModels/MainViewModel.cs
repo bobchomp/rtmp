@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
 
@@ -174,6 +175,9 @@ public class MainViewModel : INotifyPropertyChanged
     // Feature 10: Toggle theme
     public RelayCommand ToggleThemeCommand { get; }
 
+    // Feature: Toggle recording for a stream key
+    public RelayCommand ToggleRecordingCommand { get; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     public event Action<StreamKey>? StreamBecameActive;
@@ -226,6 +230,27 @@ public class MainViewModel : INotifyPropertyChanged
             _settingsService.Save();
             OnPropertyChanged(nameof(Settings));
         });
+
+        // Feature: Toggle recording for a stream key
+        ToggleRecordingCommand = new RelayCommand(
+            o =>
+            {
+                var key = o as StreamKey;
+                if (key == null) return;
+                key.RecordEnabled = !key.RecordEnabled;
+                SaveSettings();
+                StatusMessage = key.RecordEnabled
+                    ? $"Recording enabled for {key.Name}."
+                    : $"Recording disabled for {key.Name}.";
+            },
+            o =>
+            {
+                var key = o as StreamKey;
+                return key != null && IsServerRunning && !string.IsNullOrEmpty(Settings.RecordingPath);
+            });
+
+        // Sync auto-start registry on launch (keeps registry up-to-date if exe moved)
+        SetWindowsAutoStart(Settings.AutoStartWithWindows);
 
         _mediaMtx.LogMessage += msg => UIInvoke(() => AppendLog(msg));
         _monitor.LogMessage  += msg => UIInvoke(() => AppendLog(msg));
@@ -403,8 +428,28 @@ public class MainViewModel : INotifyPropertyChanged
         StatusMessage = "Settings saved.";
         RefreshDiskSpace(); // Feature 6: refresh on save
 
+        // Feature: Sync Windows auto-start registry entry
+        SetWindowsAutoStart(Settings.AutoStartWithWindows);
+
         if (IsServerRunning)
             _ = _mediaMtx.RestartAsync(Settings);
+    }
+
+    // Feature: Windows auto-start via registry
+    private static void SetWindowsAutoStart(bool enable)
+    {
+        const string regPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        using var key = Registry.CurrentUser.OpenSubKey(regPath, writable: true);
+        if (key == null) return;
+        if (enable)
+        {
+            var exe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            key.SetValue("RTMPProjector", $"\"{exe}\"");
+        }
+        else
+        {
+            key.DeleteValue("RTMPProjector", throwOnMissingValue: false);
+        }
     }
 
     // Feature 8: Save window bounds

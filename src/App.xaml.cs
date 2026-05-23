@@ -9,6 +9,7 @@ using RTMPProjector.Models;
 using RTMPProjector.Services;
 using RTMPProjector.ViewModels;
 using RTMPProjector.Windows;
+using WinForms = System.Windows.Forms;
 
 namespace RTMPProjector;
 
@@ -20,7 +21,7 @@ public partial class App : Application
     private StreamMonitorService? _monitor;
     private MainViewModel? _viewModel;
     private MainWindow? _mainWindow;
-    private ProjectionWindow? _projectionWindow;
+    private readonly Dictionary<string, ProjectionWindow> _projectionWindows = new();
 
     // ── Updater state (mirrors main.js) ───────────────────────────────────
     private UpdaterService? _updater;
@@ -319,39 +320,62 @@ public partial class App : Application
     {
         if (!_settingsService!.Settings.AutoProjectOnConnect) return;
 
-        if (_projectionWindow != null && _projectionWindow.CurrentKey?.Key != key.Key)
-        {
-            _projectionWindow.Close();
-            _projectionWindow = null;
-        }
+        // Already projecting this key — do nothing
+        if (_projectionWindows.TryGetValue(key.Key, out var existing) && existing.IsLoaded)
+            return;
 
-        if (_projectionWindow == null || !_projectionWindow.IsLoaded)
+        // Pick a monitor not already used by an open projection window
+        var usedIndices = _projectionWindows.Values
+            .Where(w => w.IsLoaded)
+            .Select(w => w.MonitorIndex)
+            .ToHashSet();
+
+        var allScreens = WinForms.Screen.AllScreens;
+        var screen = allScreens.FirstOrDefault(s =>
         {
-            var monitor = _viewModel!.SelectedMonitor;
-            _projectionWindow = new ProjectionWindow(
-                rtmpUrl: _viewModel.BuildRtmpUrl(key),
-                key: key,
-                monitor: monitor?.Screen);
-            _projectionWindow.Show();
-        }
+            var idx = Array.IndexOf(allScreens, s);
+            return !usedIndices.Contains(idx);
+        }) ?? _viewModel!.SelectedMonitor?.Screen ?? WinForms.Screen.AllScreens[0];
+
+        var win = new ProjectionWindow(
+            rtmpUrl: _viewModel!.BuildRtmpUrl(key),
+            key: key,
+            monitor: screen,
+            buildRtmpUrl: k => _viewModel.BuildRtmpUrl(k),
+            getStreamKeys: () => _viewModel.StreamKeys);
+        _projectionWindows[key.Key] = win;
+        win.Closed += (_, _) => _projectionWindows.Remove(key.Key);
+        win.Show();
 
         _trayIcon?.ShowBalloonTip("Stream Live", $"Now projecting: {key.Name}", BalloonIcon.Info);
     }
 
     private void OnStreamBecameInactive(StreamKey key)
     {
-        if (_projectionWindow?.CurrentKey?.Key == key.Key)
-            _projectionWindow.StopPlayback();
+        if (_projectionWindows.TryGetValue(key.Key, out var win))
+            win.StopPlayback();
 
         _trayIcon?.ShowBalloonTip("Stream Ended", $"{key.Name} disconnected.", BalloonIcon.Info);
     }
 
     public void OpenProjectionManually(string rtmpUrl, StreamKey key)
     {
-        _projectionWindow?.Close();
+        if (_projectionWindows.TryGetValue(key.Key, out var oldWin))
+        {
+            oldWin.StopPlayback();
+            oldWin.Close();
+        }
+
         var monitor = _viewModel!.SelectedMonitor;
-        _projectionWindow = new ProjectionWindow(rtmpUrl, key, monitor?.Screen);
-        _projectionWindow.Show();
+        var win = new ProjectionWindow(
+            rtmpUrl: rtmpUrl,
+            key: key,
+            monitor: monitor?.Screen,
+            buildRtmpUrl: k => _viewModel.BuildRtmpUrl(k),
+            getStreamKeys: () => _viewModel.StreamKeys);
+        _projectionWindows[key.Key] = win;
+        win.Closed += (_, _) => _projectionWindows.Remove(key.Key);
+        win.Show();
     }
 
     // ── Shutdown ──────────────────────────────────────────────────────────
@@ -359,7 +383,9 @@ public partial class App : Application
     private async void ExitApplication()
     {
         _updateTimer?.Dispose();
-        _projectionWindow?.Close();
+        foreach (var win in _projectionWindows.Values.ToList())
+            win.Close();
+        _projectionWindows.Clear();
         if (_viewModel != null) await _viewModel.StopServerAsync();
         if (_mediaMtx  != null) await _mediaMtx.DisposeAsync();
         if (_monitor   != null) await _monitor.DisposeAsync();

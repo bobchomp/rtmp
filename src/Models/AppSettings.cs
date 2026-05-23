@@ -22,4 +22,7 @@ public class AppSettings
 
     // Feature 10: Theme
     public string Theme { get; set; } = "Dark";
+
+    // Feature: Auto-start with Windows
+    public bool AutoStartWithWindows { get; set; } = false;
 }
