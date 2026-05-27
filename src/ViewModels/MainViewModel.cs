@@ -71,6 +71,20 @@ public class MainViewModel : INotifyPropertyChanged
     public string GetFullRtmpUrl(StreamKey key) =>
         $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
+    public string HlsBaseUrl
+    {
+        get
+        {
+            var baseUrl = string.IsNullOrWhiteSpace(Settings.WebStreamTunnelUrl)
+                ? $"http://localhost:{Settings.HlsPort}"
+                : Settings.WebStreamTunnelUrl.TrimEnd('/');
+            var first = StreamKeys.FirstOrDefault();
+            return first == null
+                ? $"{baseUrl}/live/[stream-key]/index.m3u8"
+                : $"{baseUrl}/live/{first.Key}/index.m3u8";
+        }
+    }
+
     // ── Settings pass-throughs ────────────────────────────────────────────────
 
     public AppSettings Settings => _settingsService.Settings;
@@ -427,6 +441,7 @@ public class MainViewModel : INotifyPropertyChanged
         _settingsService.Save();
         StatusMessage = "Settings saved.";
         RefreshDiskSpace(); // Feature 6: refresh on save
+        OnPropertyChanged(nameof(HlsBaseUrl));
 
         // Feature: Sync Windows auto-start registry entry
         SetWindowsAutoStart(Settings.AutoStartWithWindows);

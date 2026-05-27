@@ -133,7 +133,11 @@ public class MediaMtxService : IAsyncDisposable
             rtmpAddress: :{settings.RtmpPort}
             rtmpEncryption: "no"
 
-            hls: no
+            hls: {(settings.WebStreamEnabled ? "yes" : "no")}
+            hlsAddress: :{settings.HlsPort}
+            hlsAllowOrigin: '*'
+            hlsSegmentCount: 3
+            hlsSegmentDuration: 1s
             webrtc: no
             srt: no
 

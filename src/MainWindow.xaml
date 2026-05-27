@@ -473,6 +473,57 @@
                             </StackPanel>
                         </Border>
 
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="WEB STREAM" Style="{StaticResource SectionLabel}"/>
+                                <CheckBox Content="Enable HLS output (powers live.droneoutings.co.uk)"
+                                          IsChecked="{Binding Settings.WebStreamEnabled}"
+                                          Margin="0,0,0,12"/>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="72"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="HLS Port" Style="{StaticResource FieldLabel}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding Settings.HlsPort, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+
+                                <TextBlock Text="Cloudflare Tunnel URL" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Text="{Binding Settings.WebStreamTunnelUrl, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,8"/>
+
+                                <TextBlock Text="Website Password (blank = public)" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Text="{Binding Settings.WebStreamPassword, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,12"/>
+
+                                <TextBlock Text="STREAM URL" Style="{StaticResource SectionLabel}"/>
+                                <TextBlock Text="{Binding HlsBaseUrl}"
+                                           FontFamily="Consolas" FontSize="11"
+                                           Foreground="{DynamicResource Accent}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="(set Tunnel URL above to see the public address)"
+                                           FontSize="11" Foreground="{DynamicResource TextMuted}"
+                                           Margin="0,4,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Settings.WebStreamTunnelUrl}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Settings.WebStreamTunnelUrl}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
                                     Command="{Binding SaveSettingsCommand}"/>

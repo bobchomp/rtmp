@@ -1,0 +1,14 @@
+# Cloudflare Tunnel — RTMP Projector HLS relay
+# Replace YOUR-TUNNEL-ID and the credentials path with your actual values.
+# See SETUP.md for step-by-step instructions.
+
+tunnel: YOUR-TUNNEL-ID
+credentials-file: C:\Users\YOUR-USERNAME\.cloudflared\YOUR-TUNNEL-ID.json
+
+ingress:
+  # Exposes MediaMTX HLS on port 8888 as stream.droneoutings.co.uk
+  - hostname: stream.droneoutings.co.uk
+    service: http://localhost:8888
+
+  # Catch-all required by cloudflared
+  - service: http_status:404
