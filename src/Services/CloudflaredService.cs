@@ -93,24 +93,52 @@ public class CloudflaredService : IAsyncDisposable
 
     // ── Login ─────────────────────────────────────────────────────────────────
 
-    /// Opens a browser for the user to authorize. Completes when cloudflared exits
-    /// (which happens automatically after the user clicks Authorize in the browser).
+    /// Opens a browser for the user to authorize. Polls for cert.pem rather than
+    /// waiting for process exit, since cloudflared doesn't always exit cleanly.
     public async Task<bool> LoginAsync(IProgress<string>? progress = null,
                                        CancellationToken ct = default)
     {
-        progress?.Report("Opening browser — authorize cloudflared in Cloudflare, then return here…");
+        progress?.Report("Opening browser — sign in to Cloudflare and click Authorize, then return here…");
 
-        var psi = BuildPsi($"tunnel login", redirectOutput: false);
-        psi.UseShellExecute = false;
+        var psi = BuildPsi("tunnel login", redirectOutput: true);
+        using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[cf-login] {e.Data}"); };
+        proc.ErrorDataReceived  += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[cf-login] {e.Data}"); };
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
 
-        using var proc = Process.Start(psi);
-        if (proc == null) { progress?.Report("Failed to launch cloudflared."); return false; }
+        // Poll for cert.pem — don't rely on process exit which varies by cloudflared version
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linked.CancelAfter(TimeSpan.FromMinutes(5));
 
-        await proc.WaitForExitAsync(ct);
+        while (!linked.Token.IsCancellationRequested)
+        {
+            if (IsLoggedIn)
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+                progress?.Report("Cloudflare authorization complete.");
+                return true;
+            }
 
-        var ok = IsLoggedIn;
-        progress?.Report(ok ? "Cloudflare authorization complete." : "Authorization failed — cert.pem not found.");
-        return ok;
+            if (proc.HasExited)
+                break;
+
+            await Task.Delay(1000, linked.Token).ConfigureAwait(false);
+        }
+
+        try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+
+        if (IsLoggedIn)
+        {
+            progress?.Report("Cloudflare authorization complete.");
+            return true;
+        }
+
+        progress?.Report(ct.IsCancellationRequested
+            ? "Authorization cancelled."
+            : "Authorization timed out or cert.pem was not created. Try again.");
+        return false;
     }
 
     // ── Create tunnel ─────────────────────────────────────────────────────────
