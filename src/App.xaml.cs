@@ -37,6 +37,7 @@ public partial class App : Application
     private string? _downloadedAssetPath;
     private UpdateStatus _updateStatus = UpdateStatus.Idle;
     private System.Threading.Timer? _updateTimer;
+    private CloudflaredService? _cloudflared;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -105,10 +106,11 @@ public partial class App : Application
             }
         }
 
-        _mediaMtx = new MediaMtxService();
-        _monitor  = new StreamMonitorService();
+        _mediaMtx    = new MediaMtxService();
+        _monitor     = new StreamMonitorService();
+        _cloudflared = new CloudflaredService();
 
-        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
+        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor, _cloudflared);
         _viewModel.StreamBecameActive      += OnStreamBecameActive;
         _viewModel.StreamBecameInactive    += OnStreamBecameInactive;
         _viewModel.OpenProjectionRequested += key =>
@@ -416,9 +418,10 @@ public partial class App : Application
         foreach (var win in _projectionWindows.Values.ToList())
             win.Close();
         _projectionWindows.Clear();
-        if (_viewModel != null) await _viewModel.StopServerAsync();
-        if (_mediaMtx  != null) await _mediaMtx.DisposeAsync();
-        if (_monitor   != null) await _monitor.DisposeAsync();
+        if (_viewModel    != null) await _viewModel.StopServerAsync();
+        if (_mediaMtx     != null) await _mediaMtx.DisposeAsync();
+        if (_monitor      != null) await _monitor.DisposeAsync();
+        if (_cloudflared  != null) await _cloudflared.DisposeAsync();
         _trayIcon?.Dispose();
         Shutdown();
     }

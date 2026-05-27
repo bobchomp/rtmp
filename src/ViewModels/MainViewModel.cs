@@ -19,6 +19,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly SettingsService _settingsService;
     private readonly MediaMtxService _mediaMtx;
     private readonly StreamMonitorService _monitor;
+    private readonly CloudflaredService _cloudflared;
 
     // ── State ────────────────────────────────────────────────────────────────
 
@@ -71,13 +72,15 @@ public class MainViewModel : INotifyPropertyChanged
     public string GetFullRtmpUrl(StreamKey key) =>
         $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
+    public bool IsWebStreamConfigured => Settings.TunnelConfigured;
+
     public string HlsBaseUrl
     {
         get
         {
-            var baseUrl = string.IsNullOrWhiteSpace(Settings.WebStreamTunnelUrl)
+            var baseUrl = string.IsNullOrWhiteSpace(Settings.TunnelHostname)
                 ? $"http://localhost:{Settings.HlsPort}"
-                : Settings.WebStreamTunnelUrl.TrimEnd('/');
+                : $"https://{Settings.TunnelHostname}";
             var first = StreamKeys.FirstOrDefault();
             return first == null
                 ? $"{baseUrl}/live/[stream-key]/index.m3u8"
@@ -200,11 +203,14 @@ public class MainViewModel : INotifyPropertyChanged
 
     // ── Construction ──────────────────────────────────────────────────────────
 
-    public MainViewModel(SettingsService settingsService, MediaMtxService mediaMtx, StreamMonitorService monitor)
+    public MainViewModel(SettingsService settingsService, MediaMtxService mediaMtx,
+                         StreamMonitorService monitor, CloudflaredService cloudflared)
     {
         _settingsService = settingsService;
         _mediaMtx = mediaMtx;
         _monitor = monitor;
+        _cloudflared = cloudflared;
+        _cloudflared.LogMessage += msg => UIInvoke(() => AppendLog(msg));
 
         ToggleServerCommand = new RelayCommand(_ => _ = ToggleServerAsync());
         AddStreamKeyCommand = new RelayCommand(_ => AddStreamKey());
@@ -352,6 +358,13 @@ public class MainViewModel : INotifyPropertyChanged
             _mediaMtx.WriteConfig(Settings);
             await _mediaMtx.StartAsync();
             _monitor.Start(Settings);
+
+            if (Settings.WebStreamEnabled && Settings.TunnelConfigured)
+            {
+                try { await _cloudflared.StartAsync(); }
+                catch (Exception ex) { AppendLog($"Tunnel start failed: {ex.Message}"); }
+            }
+
             IsServerRunning = true;
             StatusMessage = $"Server running — RTMP port {Settings.RtmpPort}";
         }
@@ -373,6 +386,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _monitor.Stop();
             await _mediaMtx.StopAsync();
+            await _cloudflared.StopAsync();
             IsServerRunning = false;
             StatusMessage = "Server stopped.";
         }
@@ -431,6 +445,14 @@ public class MainViewModel : INotifyPropertyChanged
 
     // ── Settings save ─────────────────────────────────────────────────────────
 
+    // Called from MainWindow after wizard completes (no stream-key sync needed)
+    public void SaveSettingsFromView()
+    {
+        _settingsService.Save();
+        OnPropertyChanged(nameof(HlsBaseUrl));
+        OnPropertyChanged(nameof(IsWebStreamConfigured));
+    }
+
     private void SaveSettings()
     {
         // Sync editable fields from StreamKeys back to Settings
@@ -440,8 +462,9 @@ public class MainViewModel : INotifyPropertyChanged
 
         _settingsService.Save();
         StatusMessage = "Settings saved.";
-        RefreshDiskSpace(); // Feature 6: refresh on save
+        RefreshDiskSpace();
         OnPropertyChanged(nameof(HlsBaseUrl));
+        OnPropertyChanged(nameof(IsWebStreamConfigured));
 
         // Feature: Sync Windows auto-start registry entry
         SetWindowsAutoStart(Settings.AutoStartWithWindows);

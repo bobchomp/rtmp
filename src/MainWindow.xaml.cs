@@ -2,7 +2,9 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
+using RTMPProjector.Services;
 using RTMPProjector.ViewModels;
+using RTMPProjector.Windows;
 
 namespace RTMPProjector;
 
@@ -76,4 +78,18 @@ public partial class MainWindow : Window
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
         => _vm.ClearLog();
+
+    private void SetupWebStream_Click(object sender, RoutedEventArgs e)
+    {
+        var cf = new CloudflaredService();
+        var wizard = new WebStreamSetupWizard(cf, _vm.Settings) { Owner = this };
+        wizard.SetupCompleted += (tunnelId, hostname) =>
+        {
+            _vm.Settings.TunnelId = tunnelId;
+            _vm.Settings.TunnelHostname = hostname;
+            _vm.Settings.TunnelConfigured = true;
+            _vm.SaveSettingsFromView();
+        };
+        wizard.ShowDialog();
+    }
 }
