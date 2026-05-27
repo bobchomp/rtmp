@@ -20,6 +20,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly MediaMtxService _mediaMtx;
     private readonly StreamMonitorService _monitor;
     private readonly CloudflaredService _cloudflared;
+    private readonly WebPlayerService _webPlayer;
 
     // ── State ────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,11 @@ public class MainViewModel : INotifyPropertyChanged
         $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
     public bool IsWebStreamConfigured => Settings.TunnelConfigured;
+
+    public string PlayerUrl =>
+        string.IsNullOrWhiteSpace(Settings.PlayerHostname)
+            ? $"http://localhost:{Settings.PlayerPort}/"
+            : $"https://{Settings.PlayerHostname}/";
 
     public string HlsBaseUrl
     {
@@ -204,13 +210,16 @@ public class MainViewModel : INotifyPropertyChanged
     // ── Construction ──────────────────────────────────────────────────────────
 
     public MainViewModel(SettingsService settingsService, MediaMtxService mediaMtx,
-                         StreamMonitorService monitor, CloudflaredService cloudflared)
+                         StreamMonitorService monitor, CloudflaredService cloudflared,
+                         WebPlayerService webPlayer)
     {
         _settingsService = settingsService;
         _mediaMtx = mediaMtx;
         _monitor = monitor;
         _cloudflared = cloudflared;
+        _webPlayer = webPlayer;
         _cloudflared.LogMessage += msg => UIInvoke(() => AppendLog(msg));
+        _webPlayer.LogMessage   += msg => UIInvoke(() => AppendLog(msg));
 
         ToggleServerCommand = new RelayCommand(_ => _ = ToggleServerAsync());
         AddStreamKeyCommand = new RelayCommand(_ => AddStreamKey());
@@ -361,8 +370,12 @@ public class MainViewModel : INotifyPropertyChanged
 
             if (Settings.WebStreamEnabled && Settings.TunnelConfigured)
             {
-                try { await _cloudflared.StartAsync(); }
-                catch (Exception ex) { AppendLog($"Tunnel start failed: {ex.Message}"); }
+                try
+                {
+                    _webPlayer.Start(Settings);
+                    await _cloudflared.StartAsync();
+                }
+                catch (Exception ex) { AppendLog($"Web stream start failed: {ex.Message}"); }
             }
 
             IsServerRunning = true;
@@ -386,6 +399,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _monitor.Stop();
             await _mediaMtx.StopAsync();
+            _webPlayer.Stop();
             await _cloudflared.StopAsync();
             IsServerRunning = false;
             StatusMessage = "Server stopped.";
@@ -450,6 +464,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _settingsService.Save();
         OnPropertyChanged(nameof(HlsBaseUrl));
+        OnPropertyChanged(nameof(PlayerUrl));
         OnPropertyChanged(nameof(IsWebStreamConfigured));
     }
 
@@ -464,6 +479,7 @@ public class MainViewModel : INotifyPropertyChanged
         StatusMessage = "Settings saved.";
         RefreshDiskSpace();
         OnPropertyChanged(nameof(HlsBaseUrl));
+        OnPropertyChanged(nameof(PlayerUrl));
         OnPropertyChanged(nameof(IsWebStreamConfigured));
 
         // Feature: Sync Windows auto-start registry entry

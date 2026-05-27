@@ -2,8 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Web Stream Setup"
-        Width="500" Height="480"
-        MinWidth="500" MinHeight="480"
+        Width="500" Height="560"
+        MinWidth="500" MinHeight="560"
         ResizeMode="NoResize"
         Background="{StaticResource BgDeep}"
         WindowStartupLocation="CenterOwner"
@@ -26,15 +26,25 @@
                        Foreground="{StaticResource TextMuted}" FontSize="13" Margin="0,4,0,0"/>
         </StackPanel>
 
-        <!-- Subdomain input -->
-        <StackPanel Grid.Row="1" Margin="0,0,0,20">
-            <TextBlock Text="STREAM SUBDOMAIN" Foreground="{StaticResource TextMuted}"
+        <!-- Subdomain inputs -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <TextBlock Text="PLAYER SUBDOMAIN  (website viewers open)"
+                       Foreground="{StaticResource TextMuted}"
                        FontSize="11" FontWeight="SemiBold" Margin="0,0,0,6"/>
-            <TextBox x:Name="HostnameBox"
+            <TextBox x:Name="PlayerHostnameBox"
                      FontFamily="Consolas" FontSize="13"
-                     IsEnabled="{Binding IsIdle}"/>
-            <TextBlock Text="e.g.  stream.droneoutings.co.uk  — must be on your Cloudflare account"
-                       Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0"/>
+                     IsEnabled="{Binding IsIdle}" Margin="0,0,0,4"/>
+            <TextBlock Text="e.g.  live.droneoutings.co.uk"
+                       Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,0,12"/>
+
+            <TextBlock Text="STREAM SUBDOMAIN  (HLS output, referenced internally)"
+                       Foreground="{StaticResource TextMuted}"
+                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <TextBox x:Name="StreamHostnameBox"
+                     FontFamily="Consolas" FontSize="13"
+                     IsEnabled="{Binding IsIdle}" Margin="0,0,0,4"/>
+            <TextBlock Text="e.g.  stream.droneoutings.co.uk  — both must be on your Cloudflare account"
+                       Foreground="{StaticResource TextMuted}" FontSize="11"/>
         </StackPanel>
 
         <!-- Step list -->

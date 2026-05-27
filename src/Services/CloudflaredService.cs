@@ -170,16 +170,24 @@ public class CloudflaredService : IAsyncDisposable
 
     // ── Write config ──────────────────────────────────────────────────────────
 
-    public void WriteConfig(string tunnelId, string hostname, int hlsPort)
+    public void WriteConfig(string tunnelId, string streamHostname, int hlsPort,
+                             string playerHostname, int playerPort)
     {
         var credPath = Path.Combine(CfDir, $"{tunnelId}.json").Replace('\\', '/');
+
+        var playerIngress = string.IsNullOrWhiteSpace(playerHostname) ? "" : $"""
+
+              - hostname: {playerHostname}
+                service: http://localhost:{playerPort}
+            """;
+
         var config = $"""
             tunnel: {tunnelId}
             credentials-file: {credPath}
 
             ingress:
-              - hostname: {hostname}
-                service: http://localhost:{hlsPort}
+              - hostname: {streamHostname}
+                service: http://localhost:{hlsPort}{playerIngress}
               - service: http_status:404
             """;
 

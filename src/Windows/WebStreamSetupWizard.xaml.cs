@@ -38,7 +38,8 @@ public partial class WebStreamSetupWizard : Window, INotifyPropertyChanged
         new() { Label = "Download cloudflared" },
         new() { Label = "Authorize with Cloudflare (opens browser)" },
         new() { Label = "Create tunnel" },
-        new() { Label = "Configure DNS" },
+        new() { Label = "Configure DNS — player subdomain" },
+        new() { Label = "Configure DNS — stream subdomain" },
     ];
 
     // ── ViewModel state ───────────────────────────────────────────────────────
@@ -60,8 +61,8 @@ public partial class WebStreamSetupWizard : Window, INotifyPropertyChanged
     public string ActionLabel => IsDone ? "Done" : "Set Up";
     public bool CanAct => IsIdle;
 
-    // Fired when setup completes — caller can save the tunnel ID
-    public event Action<string /*tunnelId*/, string /*hostname*/>? SetupCompleted;
+    // Fired when setup completes
+    public event Action<string /*tunnelId*/, string /*streamHostname*/, string /*playerHostname*/>? SetupCompleted;
 
     public WebStreamSetupWizard(CloudflaredService cf, AppSettings settings)
     {
@@ -70,8 +71,10 @@ public partial class WebStreamSetupWizard : Window, INotifyPropertyChanged
         DataContext = this;
         InitializeComponent();
 
-        // Pre-fill hostname from existing settings
-        HostnameBox.Text = string.IsNullOrWhiteSpace(settings.TunnelHostname)
+        PlayerHostnameBox.Text = string.IsNullOrWhiteSpace(settings.PlayerHostname)
+            ? "live.yourhost.co.uk"
+            : settings.PlayerHostname;
+        StreamHostnameBox.Text = string.IsNullOrWhiteSpace(settings.TunnelHostname)
             ? "stream.yourhost.co.uk"
             : settings.TunnelHostname;
     }
@@ -96,10 +99,12 @@ public partial class WebStreamSetupWizard : Window, INotifyPropertyChanged
 
     private async Task RunSetupAsync()
     {
-        var hostname = HostnameBox.Text.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(hostname) || !hostname.Contains('.'))
+        var playerHost = PlayerHostnameBox.Text.Trim().ToLowerInvariant();
+        var streamHost = StreamHostnameBox.Text.Trim().ToLowerInvariant();
+
+        if (!playerHost.Contains('.') || !streamHost.Contains('.'))
         {
-            Log("Enter a valid subdomain (e.g. stream.yourdomain.co.uk).");
+            Log("Enter valid subdomains for both fields (e.g. live.yourdomain.co.uk).");
             return;
         }
 
@@ -159,25 +164,31 @@ public partial class WebStreamSetupWizard : Window, INotifyPropertyChanged
                 if (tunnelId == null) { Fail("Tunnel creation failed. Check the log above for details."); return; }
             }
 
-            // ── Step 3: DNS route ─────────────────────────────────────────────
-            var stepDns = Steps[3];
-            stepDns.Status = StepStatus.Running;
-            var dnsOk = await _cf.RouteDnsAsync(tunnelName, hostname, new Progress<string>(Log));
-            stepDns.Status = dnsOk ? StepStatus.Done : StepStatus.Error;
-            if (!dnsOk)
-            {
-                // DNS can fail if the record already exists — treat as a soft warning
-                Log("DNS step reported an error but the record may already exist. Continuing…");
-                stepDns.Status = StepStatus.Done;
-            }
+            // ── Step 3: DNS — player subdomain ────────────────────────────────
+            var stepDnsPlayer = Steps[3];
+            stepDnsPlayer.Status = StepStatus.Running;
+            var playerDnsOk = await _cf.RouteDnsAsync(tunnelName, playerHost, new Progress<string>(Log));
+            // DNS fails gracefully if record already exists
+            stepDnsPlayer.Status = StepStatus.Done;
+            if (!playerDnsOk) Log("Player DNS may already exist — continuing.");
+
+            // ── Step 4: DNS — stream subdomain ────────────────────────────────
+            var stepDnsStream = Steps[4];
+            stepDnsStream.Status = StepStatus.Running;
+            var streamDnsOk = await _cf.RouteDnsAsync(tunnelName, streamHost, new Progress<string>(Log));
+            stepDnsStream.Status = StepStatus.Done;
+            if (!streamDnsOk) Log("Stream DNS may already exist — continuing.");
 
             // ── Write config & notify ─────────────────────────────────────────
-            _cf.WriteConfig(tunnelId, hostname, _settings.HlsPort);
-            Log($"\nSetup complete! Your stream will be available at:");
-            Log($"https://{hostname}/live/[stream-key]/index.m3u8");
+            _cf.WriteConfig(tunnelId, streamHost, _settings.HlsPort, playerHost, _settings.PlayerPort);
+
+            Log($"\nSetup complete!");
+            Log($"  Player:  https://{playerHost}/");
+            Log($"  Stream:  https://{streamHost}/live/[key]/index.m3u8");
+            Log($"\nEnable \"Web Stream\" and start the server to go live.");
 
             IsDone = true;
-            SetupCompleted?.Invoke(tunnelId, hostname);
+            SetupCompleted?.Invoke(tunnelId, streamHost, playerHost);
         }
         catch (OperationCanceledException)
         {

@@ -83,10 +83,11 @@ public partial class MainWindow : Window
     {
         var cf = new CloudflaredService();
         var wizard = new WebStreamSetupWizard(cf, _vm.Settings) { Owner = this };
-        wizard.SetupCompleted += (tunnelId, hostname) =>
+        wizard.SetupCompleted += (tunnelId, streamHostname, playerHostname) =>
         {
             _vm.Settings.TunnelId = tunnelId;
-            _vm.Settings.TunnelHostname = hostname;
+            _vm.Settings.TunnelHostname = streamHostname;
+            _vm.Settings.PlayerHostname = playerHostname;
             _vm.Settings.TunnelConfigured = true;
             _vm.SaveSettingsFromView();
         };

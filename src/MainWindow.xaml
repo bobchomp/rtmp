@@ -521,11 +521,11 @@
                                     <TextBox Text="{Binding Settings.WebStreamPassword, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,0,0,12"/>
 
-                                    <TextBlock Text="STREAM URL" Style="{StaticResource SectionLabel}"/>
-                                    <TextBlock Text="{Binding HlsBaseUrl}"
+                                    <TextBlock Text="PLAYER URL" Style="{StaticResource SectionLabel}"/>
+                                    <TextBlock Text="{Binding PlayerUrl}"
                                                FontFamily="Consolas" FontSize="11"
                                                Foreground="{DynamicResource Accent}"
-                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                               TextWrapping="Wrap" Margin="0,0,0,12"/>
 
                                     <Button Style="{StaticResource GhostBtn}" Content="Reconfigure Tunnel"
                                             Click="SetupWebStream_Click" HorizontalAlignment="Left"/>
