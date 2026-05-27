@@ -205,8 +205,11 @@ public class CloudflaredService : IAsyncDisposable
 
         var playerIngress = string.IsNullOrWhiteSpace(playerHostname) ? "" : $"""
 
+
               - hostname: {playerHostname}
                 service: http://localhost:{playerPort}
+                originRequest:
+                  httpHostHeader: "localhost"
             """;
 
         var config = $"""
@@ -215,7 +218,9 @@ public class CloudflaredService : IAsyncDisposable
 
             ingress:
               - hostname: {streamHostname}
-                service: http://localhost:{hlsPort}{playerIngress}
+                service: http://localhost:{hlsPort}
+                originRequest:
+                  httpHostHeader: "localhost"{playerIngress}
               - service: http_status:404
             """;
 
