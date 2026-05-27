@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Live Stream</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Password gate ───────────────────────────────────────────────────── -->
+  <div id="gate" class="screen">
+    <div class="gate-card">
+      <div class="gate-icon">📡</div>
+      <h1 id="gate-title" class="gate-title">Live Stream</h1>
+      <p class="gate-sub">This stream is password protected.</p>
+      <input id="gate-input" class="gate-input" type="password"
+             placeholder="Enter password" autocomplete="off" autocorrect="off"
+             spellcheck="false">
+      <button id="gate-btn" class="gate-btn">Watch Live</button>
+      <p id="gate-error" class="gate-error"></p>
+    </div>
+  </div>
+
+  <!-- ── Offline ─────────────────────────────────────────────────────────── -->
+  <div id="offline" class="screen">
+    <div class="offline-content">
+      <div class="offline-dot"></div>
+      <p class="offline-label">Offline</p>
+      <p class="offline-sub">No stream is currently broadcasting.</p>
+      <p class="retry-label">Retrying in <span id="retry-count">10</span>s</p>
+    </div>
+  </div>
+
+  <!-- ── Player ──────────────────────────────────────────────────────────── -->
+  <div id="player-screen" class="screen">
+    <video id="video" autoplay muted playsinline></video>
+
+    <div id="hud">
+      <div class="hud-left">
+        <div class="live-badge">
+          <span class="live-badge-dot"></span>
+          LIVE
+        </div>
+        <span id="hud-title"></span>
+      </div>
+      <div class="hud-right">
+        <button id="mute-btn" class="hud-btn" title="Toggle mute">🔇</button>
+        <button id="fs-btn"   class="hud-btn" title="Fullscreen">⛶</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script src="config.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>

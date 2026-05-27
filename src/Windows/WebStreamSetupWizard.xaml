@@ -1,0 +1,113 @@
+<Window x:Class="RTMPProjector.Windows.WebStreamSetupWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Web Stream Setup"
+        Width="500" Height="560"
+        MinWidth="500" MinHeight="560"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgDeep}"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- heading -->
+            <RowDefinition Height="Auto"/>  <!-- hostname input -->
+            <RowDefinition Height="Auto"/>  <!-- steps -->
+            <RowDefinition Height="*"/>     <!-- log -->
+            <RowDefinition Height="Auto"/>  <!-- buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Heading -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Set Up Web Streaming" FontSize="20" FontWeight="Bold"
+                       Foreground="{StaticResource TextPrim}"/>
+            <TextBlock Text="One-time setup — takes about a minute."
+                       Foreground="{StaticResource TextMuted}" FontSize="13" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Subdomain inputs -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <TextBlock Text="PLAYER SUBDOMAIN  (website viewers open)"
+                       Foreground="{StaticResource TextMuted}"
+                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <TextBox x:Name="PlayerHostnameBox"
+                     FontFamily="Consolas" FontSize="13"
+                     IsEnabled="{Binding IsIdle}" Margin="0,0,0,4"/>
+            <TextBlock Text="e.g.  live.droneoutings.co.uk"
+                       Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,0,12"/>
+
+            <TextBlock Text="STREAM SUBDOMAIN  (HLS output, referenced internally)"
+                       Foreground="{StaticResource TextMuted}"
+                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <TextBox x:Name="StreamHostnameBox"
+                     FontFamily="Consolas" FontSize="13"
+                     IsEnabled="{Binding IsIdle}" Margin="0,0,0,4"/>
+            <TextBlock Text="e.g.  stream.droneoutings.co.uk  — both must be on your Cloudflare account"
+                       Foreground="{StaticResource TextMuted}" FontSize="11"/>
+        </StackPanel>
+
+        <!-- Step list -->
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding Steps}" Margin="0,0,0,16"
+                      IsTabStop="False">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,5,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="Icon" Text="○" FontSize="14"
+                                   Foreground="{StaticResource TextMuted}"
+                                   VerticalAlignment="Center"/>
+
+                        <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                   Foreground="{StaticResource TextMuted}" FontSize="13"
+                                   VerticalAlignment="Center" x:Name="LabelTb"/>
+
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Status}" Value="Running">
+                                <Setter TargetName="Icon"    Property="Text"       Value="●"/>
+                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Status}" Value="Done">
+                                <Setter TargetName="Icon"    Property="Text"       Value="✓"/>
+                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Success}"/>
+                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Status}" Value="Skipped">
+                                <Setter TargetName="Icon"    Property="Text"       Value="—"/>
+                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextMuted}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Status}" Value="Error">
+                                <Setter TargetName="Icon"    Property="Text"       Value="✕"/>
+                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Danger}"/>
+                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource Danger}"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Log / status -->
+        <Border Grid.Row="3" Background="{StaticResource BgCard}" CornerRadius="6"
+                Padding="12" Margin="0,0,0,20">
+            <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="LogBox" Foreground="{StaticResource TextMuted}"
+                           FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal">
+            <Button x:Name="ActionBtn" Style="{StaticResource BaseBtn}"
+                    Content="{Binding ActionLabel}" IsEnabled="{Binding CanAct}"
+                    Click="ActionBtn_Click" MinWidth="100"/>
+            <Button Style="{StaticResource GhostBtn}" Content="Close"
+                    Margin="12,0,0,0" Click="CloseBtn_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

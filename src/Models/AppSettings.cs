@@ -25,4 +25,16 @@ public class AppSettings
 
     // Feature: Auto-start with Windows
     public bool AutoStartWithWindows { get; set; } = false;
+
+    // Web stream (HLS output + Cloudflare Tunnel)
+    public bool WebStreamEnabled { get; set; } = false;
+    public int HlsPort { get; set; } = 8888;
+    public string WebStreamPassword { get; set; } = "";
+
+    // Cloudflare Tunnel (populated by WebStreamSetupWizard)
+    public string TunnelHostname { get; set; } = "";   // HLS stream subdomain
+    public string PlayerHostname { get; set; } = "";   // website subdomain
+    public int PlayerPort { get; set; } = 8889;
+    public string TunnelId { get; set; } = "";
+    public bool TunnelConfigured { get; set; } = false;
 }

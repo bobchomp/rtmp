@@ -37,6 +37,8 @@ public partial class App : Application
     private string? _downloadedAssetPath;
     private UpdateStatus _updateStatus = UpdateStatus.Idle;
     private System.Threading.Timer? _updateTimer;
+    private CloudflaredService? _cloudflared;
+    private WebPlayerService? _webPlayer;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -105,10 +107,13 @@ public partial class App : Application
             }
         }
 
-        _mediaMtx = new MediaMtxService();
-        _monitor  = new StreamMonitorService();
+        _mediaMtx    = new MediaMtxService();
+        _monitor     = new StreamMonitorService();
+        _cloudflared = new CloudflaredService();
+        _webPlayer   = new WebPlayerService();
 
-        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
+        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor,
+                                       _cloudflared, _webPlayer);
         _viewModel.StreamBecameActive      += OnStreamBecameActive;
         _viewModel.StreamBecameInactive    += OnStreamBecameInactive;
         _viewModel.OpenProjectionRequested += key =>
@@ -273,12 +278,12 @@ public partial class App : Application
 
         try
         {
-            // Extract the icon that is embedded in the exe itself (set via ApplicationIcon
-            // in the csproj). This guarantees the tray icon always matches the window icon
-            // and avoids any WPF resource-stream or Windows icon-cache mismatch.
-            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            if (!string.IsNullOrEmpty(exePath))
-                _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+            // Load the ICO directly from the embedded WPF resource, forcing 16×16 so
+            // Windows uses the correct small-size frame rather than scaling down a large one.
+            var iconUri = new Uri("pack://application:,,,/Assets/tray.ico");
+            using var stream = GetResourceStream(iconUri)?.Stream;
+            if (stream != null)
+                _trayIcon.Icon = new System.Drawing.Icon(stream, new System.Drawing.Size(16, 16));
         }
         catch { }
 
@@ -416,9 +421,11 @@ public partial class App : Application
         foreach (var win in _projectionWindows.Values.ToList())
             win.Close();
         _projectionWindows.Clear();
-        if (_viewModel != null) await _viewModel.StopServerAsync();
-        if (_mediaMtx  != null) await _mediaMtx.DisposeAsync();
-        if (_monitor   != null) await _monitor.DisposeAsync();
+        if (_viewModel    != null) await _viewModel.StopServerAsync();
+        if (_mediaMtx     != null) await _mediaMtx.DisposeAsync();
+        if (_monitor      != null) await _monitor.DisposeAsync();
+        if (_cloudflared  != null) await _cloudflared.DisposeAsync();
+        _webPlayer?.Dispose();
         _trayIcon?.Dispose();
         Shutdown();
     }

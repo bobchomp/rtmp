@@ -36,6 +36,13 @@
     <Resource Include="Assets\tray.ico" Condition="Exists('Assets\tray.ico')" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Web player files served by WebPlayerService at runtime -->
+    <Content Include="..\web\index.html"  CopyToOutputDirectory="PreserveNewest" Link="web\index.html" />
+    <Content Include="..\web\style.css"   CopyToOutputDirectory="PreserveNewest" Link="web\style.css" />
+    <Content Include="..\web\player.js"   CopyToOutputDirectory="PreserveNewest" Link="web\player.js" />
+  </ItemGroup>
+
   <!--
     VideoLAN.LibVLC.Windows 3.x ships its build targets in build/net20/ and
     build/net40/, which .NET 8 SDK projects don't pick up automatically.

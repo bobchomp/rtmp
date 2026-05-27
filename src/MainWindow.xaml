@@ -473,6 +473,66 @@
                             </StackPanel>
                         </Border>
 
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="WEB STREAM" Style="{StaticResource SectionLabel}"/>
+
+                                <!-- Not yet configured -->
+                                <StackPanel x:Name="WebStreamSetupPanel">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsWebStreamConfigured}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="Set up a Cloudflare Tunnel so your stream is accessible at your own domain — no port forwarding needed."
+                                               Foreground="{DynamicResource TextMuted}" FontSize="12"
+                                               TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                    <Button Style="{StaticResource BaseBtn}" Content="Set Up Web Stream"
+                                            Click="SetupWebStream_Click"/>
+                                </StackPanel>
+
+                                <!-- Configured -->
+                                <StackPanel>
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsWebStreamConfigured}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+
+                                    <CheckBox Content="Enable web stream (starts tunnel with server)"
+                                              IsChecked="{Binding Settings.WebStreamEnabled}"
+                                              Margin="0,0,0,12"/>
+
+                                    <TextBlock Text="HLS Port" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding Settings.HlsPort, UpdateSourceTrigger=PropertyChanged}"
+                                             Width="72" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="Website Password (blank = public)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding Settings.WebStreamPassword, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,0,0,12"/>
+
+                                    <TextBlock Text="PLAYER URL" Style="{StaticResource SectionLabel}"/>
+                                    <TextBlock Text="{Binding PlayerUrl}"
+                                               FontFamily="Consolas" FontSize="11"
+                                               Foreground="{DynamicResource Accent}"
+                                               TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                    <Button Style="{StaticResource GhostBtn}" Content="Reconfigure Tunnel"
+                                            Click="SetupWebStream_Click" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
                                     Command="{Binding SaveSettingsCommand}"/>
