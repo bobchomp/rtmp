@@ -123,7 +123,7 @@ public class MediaMtxService : IAsyncDisposable
             ###############################################
 
             logLevel: warn
-            logDestinations: [file]
+            logDestinations: [file, stdout]
             logFile: {EscapeYaml(MtxLogPath)}
 
             api: yes
@@ -190,6 +190,14 @@ public class MediaMtxService : IAsyncDisposable
         if (!File.Exists(MtxExePath))
             throw new FileNotFoundException("MediaMTX binary not found. Run EnsureBinaryAsync first.");
 
+        // Kill any orphaned mediamtx.exe left from a previous app session so the new
+        // process can bind its ports cleanly.
+        foreach (var stale in Process.GetProcessesByName("mediamtx"))
+        {
+            try { stale.Kill(entireProcessTree: true); stale.WaitForExit(2000); } catch { }
+            stale.Dispose();
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = MtxExePath,
@@ -202,8 +210,8 @@ public class MediaMtxService : IAsyncDisposable
         };
 
         _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke(e.Data); };
-        _process.ErrorDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"ERR: {e.Data}"); };
+        _process.OutputDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
+        _process.ErrorDataReceived  += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
         _process.Exited += (_, _) => LogMessage?.Invoke("MediaMTX process exited.");
 
         _process.Start();
