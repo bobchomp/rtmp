@@ -372,6 +372,9 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 try
                 {
+                    // Always rewrite tunnel.yml so config fixes are picked up without re-running the wizard
+                    _cloudflared.WriteConfig(Settings.TunnelId, Settings.TunnelHostname, Settings.HlsPort,
+                                             Settings.PlayerHostname, Settings.PlayerPort);
                     _webPlayer.Start(Settings);
                     await _cloudflared.StartAsync();
                 }

@@ -135,7 +135,7 @@ public class MediaMtxService : IAsyncDisposable
 
             hls: {(settings.WebStreamEnabled ? "yes" : "no")}
             hlsAddress: :{settings.HlsPort}
-            hlsAllowOrigin: '*'
+            hlsAllowOrigins: ['*']
             hlsSegmentCount: 3
             hlsSegmentDuration: 1s
             webrtc: no
