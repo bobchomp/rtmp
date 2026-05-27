@@ -65,29 +65,29 @@
                         <TextBlock Grid.Column="1" Text="{Binding Label}"
                                    Foreground="{StaticResource TextMuted}" FontSize="13"
                                    VerticalAlignment="Center" x:Name="LabelTb"/>
-
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Status}" Value="Running">
-                                <Setter TargetName="Icon"    Property="Text"       Value="●"/>
-                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Accent}"/>
-                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="Done">
-                                <Setter TargetName="Icon"    Property="Text"       Value="✓"/>
-                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Success}"/>
-                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="Skipped">
-                                <Setter TargetName="Icon"    Property="Text"       Value="—"/>
-                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextMuted}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="Error">
-                                <Setter TargetName="Icon"    Property="Text"       Value="✕"/>
-                                <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Danger}"/>
-                                <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource Danger}"/>
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
                     </Grid>
+
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Status}" Value="Running">
+                            <Setter TargetName="Icon"    Property="Text"       Value="●"/>
+                            <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Status}" Value="Done">
+                            <Setter TargetName="Icon"    Property="Text"       Value="✓"/>
+                            <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Success}"/>
+                            <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextPrim}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Status}" Value="Skipped">
+                            <Setter TargetName="Icon"    Property="Text"       Value="—"/>
+                            <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource TextMuted}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Status}" Value="Error">
+                            <Setter TargetName="Icon"    Property="Text"       Value="✕"/>
+                            <Setter TargetName="Icon"    Property="Foreground" Value="{StaticResource Danger}"/>
+                            <Setter TargetName="LabelTb" Property="Foreground" Value="{StaticResource Danger}"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
