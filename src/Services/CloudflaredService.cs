@@ -118,7 +118,7 @@ public class CloudflaredService : IAsyncDisposable
     public async Task<string?> CreateTunnelAsync(string tunnelName,
                                                   IProgress<string>? progress = null)
     {
-        progress?.Report($"Creating tunnel "{tunnelName}"…");
+        progress?.Report($"Creating tunnel \"{tunnelName}\"…");
 
         var (stdout, _) = await RunAsync($"tunnel create \"{tunnelName}\"");
 
@@ -131,7 +131,7 @@ public class CloudflaredService : IAsyncDisposable
         }
 
         // Tunnel may already exist — try to list and find it
-        progress?.Report($"Checking for existing tunnel "{tunnelName}"…");
+        progress?.Report($"Checking for existing tunnel \"{tunnelName}\"…");
         var (listOut, _) = await RunAsync("tunnel list --output json");
         try
         {
