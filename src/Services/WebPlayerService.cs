@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using RTMPProjector.Models;
 
@@ -10,11 +11,16 @@ namespace RTMPProjector.Services;
 /// Runs on localhost:{PlayerPort} — exposed to the internet via Cloudflare Tunnel.
 /// config.js is generated live from current app settings so the website always
 /// reflects the active stream key, title, and password without any manual editing.
+/// All /live/* HLS requests are reverse-proxied internally to MediaMTX so the
+/// player and stream are on the same origin — no CORS needed.
 /// </summary>
 public class WebPlayerService : IDisposable
 {
     private static readonly string WebDir =
         Path.Combine(AppContext.BaseDirectory, "web");
+
+    // Reusable client for proxying HLS segments to MediaMTX on localhost
+    private static readonly HttpClient _hlsClient = new HttpClient();
 
     private readonly HttpListener _listener = new();
     private AppSettings? _settings;
@@ -79,10 +85,20 @@ public class WebPlayerService : IDisposable
     {
         try
         {
-            var path = ctx.Request.Url?.AbsolutePath.TrimEnd('/') ?? "/";
-            if (path == "") path = "/";
+            var path = ctx.Request.Url?.AbsolutePath ?? "/";
 
-            switch (path)
+            // Proxy all HLS traffic to MediaMTX internally so the player and
+            // stream share the same origin — no cross-origin / CORS issues.
+            if (path.StartsWith("/live/", StringComparison.OrdinalIgnoreCase))
+            {
+                ProxyHls(ctx);
+                return;
+            }
+
+            var trimmed = path.TrimEnd('/');
+            if (trimmed == "") trimmed = "/";
+
+            switch (trimmed)
             {
                 case "/":
                 case "/index.html":
@@ -106,18 +122,56 @@ public class WebPlayerService : IDisposable
         catch { ctx.Response.Abort(); }
     }
 
+    private void ProxyHls(HttpListenerContext ctx)
+    {
+        var s = _settings;
+        if (s == null) { ctx.Response.StatusCode = 503; ctx.Response.Close(); return; }
+
+        // Forward the request (including any query string) to MediaMTX on localhost
+        var targetUrl = $"http://localhost:{s.HlsPort}{ctx.Request.Url!.PathAndQuery}";
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, targetUrl);
+            using var resp = _hlsClient.Send(req, HttpCompletionOption.ResponseHeadersRead);
+
+            ctx.Response.StatusCode = (int)resp.StatusCode;
+
+            var ct = resp.Content.Headers.ContentType?.ToString();
+            if (!string.IsNullOrEmpty(ct))
+                ctx.Response.ContentType = ct;
+
+            if (resp.Content.Headers.ContentLength is long len)
+                ctx.Response.ContentLength64 = len;
+
+            using var body = resp.Content.ReadAsStream();
+            body.CopyTo(ctx.Response.OutputStream);
+        }
+        catch
+        {
+            // MediaMTX not running or stream not ready
+            ctx.Response.StatusCode = 503;
+        }
+        finally
+        {
+            ctx.Response.Close();
+        }
+    }
+
     private void ServeConfigJs(HttpListenerResponse resp)
     {
         var s = _settings;
         if (s == null) { resp.StatusCode = 503; resp.Close(); return; }
 
-        var streamBase = string.IsNullOrWhiteSpace(s.TunnelHostname)
-            ? $"http://localhost:{s.HlsPort}"
-            : $"https://{s.TunnelHostname}";
+        // HLS is served from the same hostname as the player (proxied through this
+        // service) — no cross-origin issues regardless of the stream subdomain.
+        var playerBase = string.IsNullOrWhiteSpace(s.PlayerHostname)
+            ? $"http://localhost:{s.PlayerPort}"
+            : $"https://{s.PlayerHostname}";
 
         var first = s.StreamKeys.FirstOrDefault();
         var hlsUrl = first != null
-            ? $"{streamBase}/live/{first.Key}/index.m3u8"
+            ? $"{playerBase}/live/{first.Key}/index.m3u8"
             : "";
         var title    = first?.Name ?? "Live Stream";
         var password = s.WebStreamPassword ?? "";

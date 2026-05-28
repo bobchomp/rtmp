@@ -84,9 +84,11 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            var baseUrl = string.IsNullOrWhiteSpace(Settings.TunnelHostname)
-                ? $"http://localhost:{Settings.HlsPort}"
-                : $"https://{Settings.TunnelHostname}";
+            // HLS is proxied through the player service, so the URL uses
+            // the player hostname (same origin as the page).
+            var baseUrl = string.IsNullOrWhiteSpace(Settings.PlayerHostname)
+                ? $"http://localhost:{Settings.PlayerPort}"
+                : $"https://{Settings.PlayerHostname}";
             var first = StreamKeys.FirstOrDefault();
             return first == null
                 ? $"{baseUrl}/live/[stream-key]/index.m3u8"
