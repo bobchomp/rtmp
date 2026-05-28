@@ -78,17 +78,15 @@ public class MainViewModel : INotifyPropertyChanged
     public string PlayerUrl =>
         string.IsNullOrWhiteSpace(Settings.PlayerHostname)
             ? $"http://localhost:{Settings.PlayerPort}/"
-            : $"https://{Settings.PlayerHostname}/";
+            : $"http://{Settings.PlayerHostname}/";
 
     public string HlsBaseUrl
     {
         get
         {
-            // HLS is proxied through the player service, so the URL uses
-            // the player hostname (same origin as the page).
             var baseUrl = string.IsNullOrWhiteSpace(Settings.PlayerHostname)
                 ? $"http://localhost:{Settings.PlayerPort}"
-                : $"https://{Settings.PlayerHostname}";
+                : $"http://{Settings.PlayerHostname}";
             var first = StreamKeys.FirstOrDefault();
             return first == null
                 ? $"{baseUrl}/live/[stream-key]/index.m3u8"

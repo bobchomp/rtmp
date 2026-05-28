@@ -163,15 +163,11 @@ public class WebPlayerService : IDisposable
         var s = _settings;
         if (s == null) { resp.StatusCode = 503; resp.Close(); return; }
 
-        // HLS is served from the same hostname as the player (proxied through this
-        // service) — no cross-origin issues regardless of the stream subdomain.
-        var playerBase = string.IsNullOrWhiteSpace(s.PlayerHostname)
-            ? $"http://localhost:{s.PlayerPort}"
-            : $"https://{s.PlayerHostname}";
-
+        // Root-relative URL — resolves to the same origin as the page regardless
+        // of whether it's served over HTTP or HTTPS. Never a CORS issue.
         var first = s.StreamKeys.FirstOrDefault();
         var hlsUrl = first != null
-            ? $"{playerBase}/live/{first.Key}/index.m3u8"
+            ? $"/live/{first.Key}/index.m3u8"
             : "";
         var title    = first?.Name ?? "Live Stream";
         var password = s.WebStreamPassword ?? "";
