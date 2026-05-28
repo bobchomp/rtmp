@@ -27,7 +27,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Close the running app automatically during silent (/SILENT) installs
 CloseApplications=yes
-CloseApplicationsFilter={#MyAppExeName}
+CloseApplicationsFilter={#MyAppExeName};mediamtx.exe
 SetupIconFile=..\src\Assets\tray.ico
 
 [Languages]
