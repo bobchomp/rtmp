@@ -104,8 +104,10 @@
         lowLatencyMode: true,
         backBufferLength: 8,
         manifestLoadingTimeOut: 8000,
-        manifestLoadingMaxRetry: 0,
-        levelLoadingMaxRetry: 0,
+        manifestLoadingMaxRetry: 8,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingMaxRetry: 8,
+        levelLoadingRetryDelay: 1000,
       });
       hls.loadSource(hlsUrl);
       hls.attachMedia(video);
