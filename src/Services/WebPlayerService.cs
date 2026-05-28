@@ -127,15 +127,16 @@ public class WebPlayerService : IDisposable
         var s = _settings;
         if (s == null) { ctx.Response.StatusCode = 503; ctx.Response.Close(); return; }
 
-        // Forward the request (including any query string) to MediaMTX on localhost
-        var targetUrl = $"http://localhost:{s.HlsPort}{ctx.Request.Url!.PathAndQuery}";
+        var path = ctx.Request.Url!.PathAndQuery;
+        var targetUrl = $"http://localhost:{s.HlsPort}{path}";
 
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, targetUrl);
             using var resp = _hlsClient.Send(req, HttpCompletionOption.ResponseHeadersRead);
 
-            ctx.Response.StatusCode = (int)resp.StatusCode;
+            var status = (int)resp.StatusCode;
+            ctx.Response.StatusCode = status;
 
             var ct = resp.Content.Headers.ContentType?.ToString();
             if (!string.IsNullOrEmpty(ct))
@@ -143,18 +144,24 @@ public class WebPlayerService : IDisposable
 
             if (resp.Content.Headers.ContentLength is long len)
                 ctx.Response.ContentLength64 = len;
+            else
+                ctx.Response.SendChunked = true;
+
+            // Only log non-200 responses for manifests so the log isn't spammed
+            if (status != 200 && path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
+                LogMessage?.Invoke($"[hls-proxy] {path} → {status}");
 
             using var body = resp.Content.ReadAsStream();
             body.CopyTo(ctx.Response.OutputStream);
         }
-        catch
+        catch (Exception ex)
         {
-            // MediaMTX not running or stream not ready
-            ctx.Response.StatusCode = 503;
+            LogMessage?.Invoke($"[hls-proxy] ERROR proxying {path}: {ex.Message}");
+            try { ctx.Response.StatusCode = 503; } catch { }
         }
         finally
         {
-            ctx.Response.Close();
+            try { ctx.Response.Close(); } catch { }
         }
     }
 
