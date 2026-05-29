@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="RTMP Projector — receive drone and camera streams on your PC, project them to any monitor, record locally, and broadcast live to the web.">
+  <title>RTMP Projector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Nav -->
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="#" class="logo">
+        <span class="logo-icon">📡</span>
+        <span class="logo-text">RTMP Projector</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#download" class="btn btn-sm">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="badge">Windows · Free · Open Source</div>
+      <h1>Stream from the sky.<br>Show it anywhere.</h1>
+      <p class="hero-sub">RTMP Projector receives live video from DJI drones, OBS, and any RTMP encoder. Project it fullscreen on any monitor, record it locally, and broadcast it live to the web — all from a single app on your PC.</p>
+      <div class="hero-actions">
+        <a href="#download" class="btn btn-primary btn-lg" id="hero-download-btn">
+          Download for Windows
+        </a>
+        <a href="https://github.com/bobchomp/rtmp" target="_blank" rel="noopener" class="btn btn-ghost btn-lg">
+          View on GitHub →
+        </a>
+      </div>
+      <p class="hero-note" id="hero-version">Fetching latest version…</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+      <p class="section-sub">Built for drone pilots, event operators, and anyone who needs to get a live video signal from point A to everywhere else.</p>
+
+      <div class="feature-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3>Full-screen projection</h3>
+          <p>Project your stream to any connected monitor or TV at the click of a button. Perfect for displaying drone footage on a big screen at events.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📶</div>
+          <h3>Universal RTMP input</h3>
+          <p>Works with DJI drones, DJI RC controllers, OBS Studio, and any device that can push an RTMP stream. No special drivers or apps needed on the sender.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🌐</div>
+          <h3>Live web player</h3>
+          <p>Broadcast to a password-protected web page that anyone can watch on their phone or laptop — no streaming platform account required. Powered by Cloudflare Tunnel, so no port forwarding needed.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⏺️</div>
+          <h3>Local recording</h3>
+          <p>Record every stream automatically to MP4 on your local drive. Choose which streams to record individually, and set a custom save location.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔑</div>
+          <h3>Multiple stream keys</h3>
+          <p>Manage multiple stream keys with individual names and settings. Each key can have its own recording and restream configuration.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Re-stream to platforms</h3>
+          <p>Forward your stream to YouTube Live, Twitch, or any RTMP destination simultaneously, without leaving the app.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔔</div>
+          <h3>Auto-projection</h3>
+          <p>Optionally project the stream fullscreen as soon as it connects — no need to be at the keyboard. Ideal for unmanned display setups.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔁</div>
+          <h3>Auto-updates</h3>
+          <p>Checks for new releases on startup and updates silently in the background. You always have the latest version without any manual effort.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how" id="how-it-works">
+    <div class="container">
+      <h2 class="section-title">How it works</h2>
+      <p class="section-sub">Three steps from launch to live.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-body">
+            <h3>Install and add your stream key</h3>
+            <p>Download and install RTMP Projector. Add a stream key — the app generates a unique RTMP URL automatically. Point your drone or encoder at it.</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-body">
+            <h3>Start the server and fly</h3>
+            <p>Hit Start Server. The moment your drone connects, the stream appears in the app. Click Project to push it fullscreen to your display monitor.</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-body">
+            <h3>Share the web player (optional)</h3>
+            <p>Run the one-time web stream setup wizard to connect your Cloudflare account. From then on, anyone with the link — and the password if you set one — can watch live from their browser.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="download-section" id="download">
+    <div class="container download-inner">
+      <h2>Ready to get started?</h2>
+      <p>Free, open source, and runs entirely on your PC. No accounts, no subscriptions.</p>
+      <a href="#" class="btn btn-primary btn-xl" id="download-btn">
+        <span class="btn-icon">⬇</span>
+        <span>
+          <span id="dl-label">Download for Windows</span>
+          <small id="dl-version"></small>
+        </span>
+      </a>
+      <p class="download-note">Windows 10 / 11 · 64-bit · ~30 MB installer<br>
+        <a href="https://github.com/bobchomp/rtmp/releases" target="_blank" rel="noopener">See all releases and changelog →</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>© 2026 RTMP Projector</span>
+      <div class="footer-links">
+        <a href="https://github.com/bobchomp/rtmp" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/bobchomp/rtmp/issues" target="_blank" rel="noopener">Report an issue</a>
+        <a href="https://github.com/bobchomp/rtmp/releases" target="_blank" rel="noopener">Releases</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
