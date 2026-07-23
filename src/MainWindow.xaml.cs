@@ -58,11 +58,22 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        // Feature 8: Save window bounds before hiding
         _vm.SaveWindowBounds(Left, Top, Width, Height);
-
         e.Cancel = true;
-        Hide();
+
+        var dlg = new RTMPProjector.Windows.CloseDialog { Owner = this };
+        dlg.ShowDialog();
+
+        switch (dlg.Choice)
+        {
+            case RTMPProjector.Windows.CloseDialogResult.MinimiseToTray:
+                Hide();
+                break;
+            case RTMPProjector.Windows.CloseDialogResult.Quit:
+                System.Windows.Application.Current.Shutdown();
+                break;
+            // Cancel: do nothing, window stays open
+        }
     }
 
     private void MinimiseToTray_Click(object sender, RoutedEventArgs e) => Hide();
