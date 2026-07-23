@@ -379,6 +379,51 @@
                                 <TextBlock Text="e.g. rtmp://live.twitch.tv/app/YOUR_KEY"
                                            Foreground="{DynamicResource TextMuted}" FontSize="11"/>
 
+                                <Separator/>
+
+                                <!-- NDI OUTPUT ───────────────────────────── -->
+                                <TextBlock Text="NDI OUTPUT" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
+                                <CheckBox Content="Send as NDI stream" IsChecked="{Binding NdiEnabled}" Margin="0,0,0,8"/>
+
+                                <!-- NDI name field — shown only when NDI is enabled -->
+                                <StackPanel>
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding NdiEnabled}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="NDI Stream Name" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding NdiStreamName, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,0,0,4"/>
+                                    <TextBlock Text="Leave blank to use the Display Name above."
+                                               Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                                </StackPanel>
+
+                                <!-- Warning when NDI Runtime is not installed -->
+                                <TextBlock Text="NDI Runtime not found. Download it from ndi.video and restart the app."
+                                           Foreground="#f39c12" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding NdiEnabled}" Value="True"/>
+                                                        <Condition Binding="{Binding DataContext.NdiAvailable,
+                                                            RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
                                 <Separator Margin="0,12"/>
 
                                 <Button Style="{StaticResource BaseBtn}" Content="Save Changes"
