@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using RTMPProjector.Interop;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
 
@@ -22,6 +23,9 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly CloudflaredService _cloudflared;
     private readonly WebPlayerService _webPlayer;
 
+    // Active NDI senders — one per stream key with NdiEnabled=true
+    private readonly Dictionary<string, NdiSenderService> _ndiSenders = [];
+
     // ── State ────────────────────────────────────────────────────────────────
 
     private bool _isServerRunning;
@@ -33,6 +37,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     public string ServerStatusText => IsServerRunning ? "Running" : "Stopped";
     public string ServerStatusColor => IsServerRunning ? "#2ecc71" : "#e74c3c";
+
+    public bool NdiAvailable => NdiLib.IsAvailable;
 
     private string _statusMessage = "Server not started.";
     public string StatusMessage
@@ -221,6 +227,9 @@ public class MainViewModel : INotifyPropertyChanged
         _cloudflared.LogMessage += msg => UIInvoke(() => AppendLog(msg));
         _webPlayer.LogMessage   += msg => UIInvoke(() => AppendLog(msg));
 
+        // Try to load NDI SDK runtime (non-fatal if absent)
+        NdiLib.TryLoad();
+
         ToggleServerCommand = new RelayCommand(_ => _ = ToggleServerAsync());
         AddStreamKeyCommand = new RelayCommand(_ => AddStreamKey());
         RemoveStreamKeyCommand = new RelayCommand(
@@ -289,6 +298,10 @@ public class MainViewModel : INotifyPropertyChanged
             // StreamKey.IsActive was already set in the monitor — INPC fires automatically
             StatusMessage = $"Stream connected: {key.RtmpPath}";
             AppendLog($"Stream STARTED — path: {key.RtmpPath}  name: {key.Name}");
+
+            if (key.NdiEnabled)
+                StartNdiSender(key);
+
             StreamBecameActive?.Invoke(key);
         });
 
@@ -298,6 +311,9 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = IsServerRunning
                 ? $"Server running — RTMP port {Settings.RtmpPort}"
                 : "Server stopped.";
+
+            StopNdiSender(key.Id);
+
             StreamBecameInactive?.Invoke(key);
         });
 
@@ -404,6 +420,7 @@ public class MainViewModel : INotifyPropertyChanged
             await _mediaMtx.StopAsync();
             _webPlayer.Stop();
             await _cloudflared.StopAsync();
+            StopAllNdiSenders();
             IsServerRunning = false;
             StatusMessage = "Server stopped.";
         }
@@ -411,6 +428,33 @@ public class MainViewModel : INotifyPropertyChanged
         {
             IsBusy = false;
         }
+    }
+
+    // ── NDI sender management ─────────────────────────────────────────────────
+
+    private void StartNdiSender(StreamKey key)
+    {
+        StopNdiSender(key.Id);
+        var sender = new NdiSenderService();
+        sender.LogMessage += msg => UIInvoke(() => AppendLog(msg));
+        _ndiSenders[key.Id] = sender;
+        var ndiName = string.IsNullOrWhiteSpace(key.NdiStreamName) ? key.Name : key.NdiStreamName;
+        sender.Start(BuildRtmpUrl(key), ndiName);
+    }
+
+    private void StopNdiSender(string keyId)
+    {
+        if (_ndiSenders.TryGetValue(keyId, out var s))
+        {
+            s.Dispose();
+            _ndiSenders.Remove(keyId);
+        }
+    }
+
+    private void StopAllNdiSenders()
+    {
+        foreach (var s in _ndiSenders.Values) s.Dispose();
+        _ndiSenders.Clear();
     }
 
     // ── Stream key management ─────────────────────────────────────────────────

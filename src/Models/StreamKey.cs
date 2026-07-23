@@ -31,6 +31,9 @@ public class StreamKey : INotifyPropertyChanged
     public bool RestreamEnabled { get; set; } = false;
     public string RestreamUrl { get; set; } = "";
 
+    public bool NdiEnabled { get; set; } = false;
+    public string NdiStreamName { get; set; } = "";
+
     // Feature 2: Notifying IsActive
     private bool _isActive;
     [JsonIgnore]
