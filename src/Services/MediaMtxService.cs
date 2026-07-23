@@ -138,7 +138,6 @@ public class MediaMtxService : IAsyncDisposable
             hlsAllowOrigins: ['*']
             hlsSegmentCount: 3
             hlsSegmentDuration: 2s
-            hlsDisableSegmenterOnNoReaders: no
             webrtc: no
             srt: no
 
