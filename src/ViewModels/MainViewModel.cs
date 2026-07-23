@@ -229,6 +229,9 @@ public class MainViewModel : INotifyPropertyChanged
 
         // Try to load NDI SDK runtime (non-fatal if absent)
         NdiLib.TryLoad();
+        AppendLog(NdiLib.IsAvailable
+            ? "[NDI] Runtime loaded — NDI output is available."
+            : "[NDI] Runtime not found — NDI output disabled. Install from ndi.video to enable.");
 
         ToggleServerCommand = new RelayCommand(_ => _ = ToggleServerAsync());
         AddStreamKeyCommand = new RelayCommand(_ => AddStreamKey());

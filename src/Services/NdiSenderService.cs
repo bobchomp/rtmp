@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using LibVLCSharp.Shared;
 using RTMPProjector.Interop;
 
@@ -47,7 +48,7 @@ public sealed class NdiSenderService : IDisposable
     private static extern void libvlc_video_set_callbacks(
         IntPtr mp,
         VlcVideoLockCb @lock,
-        IntPtr unlock,      // pass IntPtr.Zero — optional
+        IntPtr unlock,
         VlcVideoDisplayCb display,
         IntPtr opaque);
 
@@ -63,7 +64,7 @@ public sealed class NdiSenderService : IDisposable
     private static extern void libvlc_audio_set_callbacks(
         IntPtr mp,
         VlcAudioPlayCb play,
-        IntPtr pause,       // pass IntPtr.Zero for each optional callback
+        IntPtr pause,
         IntPtr resume,
         IntPtr flush,
         IntPtr drain,
@@ -77,15 +78,20 @@ public sealed class NdiSenderService : IDisposable
 
     private IntPtr _ndiSender = IntPtr.Zero;
 
-    // NDI source name — must stay pinned for the NDI sender's lifetime
     private byte[]?  _ndiNameBytes;
     private GCHandle _ndiNamePin;
 
-    // Frame buffer — pinned so VLC can write directly into it from its thread
     private byte[]?  _frameBuffer;
     private GCHandle _framePin;
     private int      _frameWidth;
     private int      _frameHeight;
+
+    // Frame-rate heartbeat: count frames, log every ~5 s worth
+    private long _frameCount;
+    private long _frameCountAtLastReport;
+    private long _lastReportTick;         // Environment.TickCount64
+    private bool _firstFrameLogged;
+    private bool _firstAudioLogged;
 
     // Strong references to delegates (prevent GC while VLC holds function pointers)
     private VlcVideoFormatCb?  _fmtCb;
@@ -94,6 +100,7 @@ public sealed class NdiSenderService : IDisposable
     private VlcVideoDisplayCb? _displayCb;
     private VlcAudioPlayCb?    _audioPlayCb;
 
+    // LogMessage is invoked from VLC's decoder thread — callers must be thread-safe
     public event Action<string>? LogMessage;
     public bool IsRunning { get; private set; }
 
@@ -108,6 +115,12 @@ public sealed class NdiSenderService : IDisposable
         }
 
         Stop();
+
+        _frameCount              = 0;
+        _frameCountAtLastReport  = 0;
+        _lastReportTick          = Environment.TickCount64;
+        _firstFrameLogged        = false;
+        _firstAudioLogged        = false;
 
         try
         {
@@ -126,6 +139,8 @@ public sealed class NdiSenderService : IDisposable
             if (_ndiSender == IntPtr.Zero)
                 throw new InvalidOperationException("NDIlib_send_create returned null.");
 
+            LogMessage?.Invoke($"[NDI] Sender created — name \"{ndiName}\"");
+
             // Create a headless LibVLC instance and media player
             var vlcDir = Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64");
             Core.Initialize(Directory.Exists(vlcDir) ? vlcDir : null);
@@ -133,34 +148,37 @@ public sealed class NdiSenderService : IDisposable
             _vlc    = new LibVLC(enableDebugLogs: false);
             _player = new MediaPlayer(_vlc);
 
-            // Get the native libvlc_media_player_t* handle
+            // Log VLC player state changes so we can see if it connects to the stream
+            _player.Playing  += (_, _) => LogMessage?.Invoke("[NDI] VLC playing — decoding stream.");
+            _player.Stopped  += (_, _) => LogMessage?.Invoke("[NDI] VLC stopped.");
+            _player.EncounteredError += (_, _) => LogMessage?.Invoke("[NDI] VLC error — stream unreachable or unsupported.");
+            _player.EndReached += (_, _) => LogMessage?.Invoke("[NDI] VLC end-of-stream.");
+
+            // Wire video and audio callbacks directly via libvlc.dll P/Invoke
             var mp = _player.NativeReference;
 
-            // Wire video format + frame callbacks directly via libvlc.dll P/Invoke.
-            // Must be called before Play().
-            _fmtCb    = OnVideoFormat;
-            _fmtClean = OnVideoCleanup;
-            _lockCb   = OnVideoLock;
+            _fmtCb     = OnVideoFormat;
+            _fmtClean  = OnVideoCleanup;
+            _lockCb    = OnVideoLock;
             _displayCb = OnVideoDisplay;
 
             libvlc_video_set_format_callbacks(mp, _fmtCb, _fmtClean);
             libvlc_video_set_callbacks(mp, _lockCb, IntPtr.Zero, _displayCb, IntPtr.Zero);
 
-            // Wire audio callbacks: fixed f32l (interleaved 32-bit float) at 48 kHz stereo
             libvlc_audio_set_format(mp, "f32l", 48000, 2);
             _audioPlayCb = OnAudioPlay;
             libvlc_audio_set_callbacks(mp, _audioPlayCb,
                 IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
-            // Open the local RTMP stream with low-latency settings
+            // Open the local RTMP stream
             _media = new Media(_vlc, rtmpUrl, FromType.FromLocation,
                 ":network-caching=300",
                 ":no-video-title-show",
                 ":no-sub-autodetect-file");
 
+            LogMessage?.Invoke($"[NDI] Connecting VLC to {rtmpUrl}");
             _player.Play(_media);
             IsRunning = true;
-            LogMessage?.Invoke($"[NDI] Sender started — \"{ndiName}\"  ←  {rtmpUrl}");
         }
         catch (Exception ex)
         {
@@ -177,7 +195,6 @@ public sealed class NdiSenderService : IDisposable
         _frameWidth  = (int)width;
         _frameHeight = (int)height;
 
-        // Write "BGRA" into the 4-byte chroma buffer VLC provided
         Marshal.WriteByte(chroma, 0, (byte)'B');
         Marshal.WriteByte(chroma, 1, (byte)'G');
         Marshal.WriteByte(chroma, 2, (byte)'R');
@@ -190,13 +207,12 @@ public sealed class NdiSenderService : IDisposable
         _frameBuffer = new byte[width * height * 4];
         _framePin    = GCHandle.Alloc(_frameBuffer, GCHandleType.Pinned);
 
-        return 1; // one plane
+        LogMessage?.Invoke($"[NDI] Video format set — {width}x{height} BGRA");
+
+        return 1;
     }
 
-    private void OnVideoCleanup(IntPtr opaque)
-    {
-        FreeFramePin();
-    }
+    private void OnVideoCleanup(IntPtr opaque) => FreeFramePin();
 
     private IntPtr OnVideoLock(IntPtr opaque, ref IntPtr planes)
     {
@@ -227,6 +243,26 @@ public sealed class NdiSenderService : IDisposable
         };
 
         NdiLib.NDIlib_send_send_video_v2(_ndiSender, ref frame);
+
+        var count = Interlocked.Increment(ref _frameCount);
+
+        if (!_firstFrameLogged)
+        {
+            _firstFrameLogged = true;
+            LogMessage?.Invoke($"[NDI] Sending first video frame — {_frameWidth}x{_frameHeight}");
+        }
+
+        // Log frame rate every ~5 seconds
+        var now = Environment.TickCount64;
+        var elapsed = now - Volatile.Read(ref _lastReportTick);
+        if (elapsed >= 5000)
+        {
+            var frames = count - Volatile.Read(ref _frameCountAtLastReport);
+            var fps = frames * 1000.0 / elapsed;
+            LogMessage?.Invoke($"[NDI] Streaming — {fps:F1} fps  ({count} frames total)");
+            Volatile.Write(ref _frameCountAtLastReport, count);
+            Volatile.Write(ref _lastReportTick, now);
+        }
     }
 
     // ── VLC audio callback ────────────────────────────────────────────────────
@@ -234,6 +270,12 @@ public sealed class NdiSenderService : IDisposable
     private void OnAudioPlay(IntPtr data, IntPtr samples, uint count, long pts)
     {
         if (_ndiSender == IntPtr.Zero || samples == IntPtr.Zero) return;
+
+        if (!_firstAudioLogged)
+        {
+            _firstAudioLogged = true;
+            LogMessage?.Invoke("[NDI] Sending audio (f32l 48 kHz stereo).");
+        }
 
         var frame = new NdiLib.AudioFrameInterleaved32F
         {
@@ -253,7 +295,7 @@ public sealed class NdiSenderService : IDisposable
     public void Stop()
     {
         if (!IsRunning) return;
-        LogMessage?.Invoke("[NDI] Sender stopped.");
+        LogMessage?.Invoke($"[NDI] Sender stopped — {_frameCount} frames sent total.");
         Cleanup();
     }
 
@@ -261,7 +303,6 @@ public sealed class NdiSenderService : IDisposable
     {
         IsRunning = false;
 
-        // Stop VLC first — ensures no more callbacks fire before we free memory
         _player?.Stop();
         _player?.Dispose();
         _media?.Dispose();
@@ -270,7 +311,6 @@ public sealed class NdiSenderService : IDisposable
         _media  = null;
         _vlc    = null;
 
-        // Safe to release delegate references now that VLC is stopped
         _fmtCb       = null;
         _fmtClean    = null;
         _lockCb      = null;
