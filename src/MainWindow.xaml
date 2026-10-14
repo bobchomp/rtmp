@@ -368,7 +368,7 @@
                                     <TextBlock Text="Stream Key" Style="{StaticResource FieldLabel}"/>
                                     <!-- Hidden by default (PasswordBox) — "Show" swaps in a normal TextBox.
                                          PasswordBox can't data-bind, so code-behind keeps it in sync. -->
-                                    <Grid Margin="0,0,0,4">
+                                    <Grid Margin="0,0,0,10">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -393,13 +393,6 @@
                                         <CheckBox x:Name="ShowStreamKeyCheck" Grid.Column="1" Content="Show"
                                                   Margin="8,0,0,0" Unchecked="ShowStreamKeyCheck_Unchecked"/>
                                     </Grid>
-                                    <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="0,0,0,10">
-                                        Copy both from your platform's live-streaming settings. Common server URLs:<LineBreak/>
-                                        YouTube <Run FontFamily="Consolas">rtmp://a.rtmp.youtube.com/live2</Run><LineBreak/>
-                                        Facebook <Run FontFamily="Consolas">rtmps://live-api-s.facebook.com:443/rtmp/</Run><LineBreak/>
-                                        Twitch <Run FontFamily="Consolas">rtmp://live.twitch.tv/app</Run>
-                                    </TextBlock>
                                 </StackPanel>
 
                                 <Button HorizontalAlignment="Left" Margin="0,0,0,6"
