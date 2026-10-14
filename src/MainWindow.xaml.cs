@@ -2,7 +2,6 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
-using RTMPProjector.Services;
 using RTMPProjector.ViewModels;
 using RTMPProjector.Windows;
 
@@ -59,6 +58,10 @@ public partial class MainWindow : Window
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         _vm.SaveWindowBounds(Left, Top, Width, Height);
+
+        // App is already quitting (tray Exit / Quit below) — let the window close
+        if ((System.Windows.Application.Current as App)?.IsExiting == true) return;
+
         e.Cancel = true;
 
         var dlg = new RTMPProjector.Windows.CloseDialog { Owner = this };
@@ -70,7 +73,7 @@ public partial class MainWindow : Window
                 Hide();
                 break;
             case RTMPProjector.Windows.CloseDialogResult.Quit:
-                System.Windows.Application.Current.Shutdown();
+                (System.Windows.Application.Current as App)?.ExitApplication();
                 break;
             // Cancel: do nothing, window stays open
         }
@@ -89,19 +92,4 @@ public partial class MainWindow : Window
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
         => _vm.ClearLog();
-
-    private void SetupWebStream_Click(object sender, RoutedEventArgs e)
-    {
-        var cf = new CloudflaredService();
-        var wizard = new WebStreamSetupWizard(cf, _vm.Settings) { Owner = this };
-        wizard.SetupCompleted += (tunnelId, streamHostname, playerHostname) =>
-        {
-            _vm.Settings.TunnelId = tunnelId;
-            _vm.Settings.TunnelHostname = streamHostname;
-            _vm.Settings.PlayerHostname = playerHostname;
-            _vm.Settings.TunnelConfigured = true;
-            _vm.SaveSettingsFromView();
-        };
-        wizard.ShowDialog();
-    }
 }

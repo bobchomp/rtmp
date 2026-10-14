@@ -37,8 +37,6 @@ public partial class App : Application
     private string? _downloadedAssetPath;
     private UpdateStatus _updateStatus = UpdateStatus.Idle;
     private System.Threading.Timer? _updateTimer;
-    private CloudflaredService? _cloudflared;
-    private WebPlayerService? _webPlayer;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -107,13 +105,10 @@ public partial class App : Application
             }
         }
 
-        _mediaMtx    = new MediaMtxService();
-        _monitor     = new StreamMonitorService();
-        _cloudflared = new CloudflaredService();
-        _webPlayer   = new WebPlayerService();
+        _mediaMtx = new MediaMtxService();
+        _monitor  = new StreamMonitorService();
 
-        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor,
-                                       _cloudflared, _webPlayer);
+        _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
         _viewModel.StreamBecameActive      += OnStreamBecameActive;
         _viewModel.StreamBecameInactive    += OnStreamBecameInactive;
         _viewModel.OpenProjectionRequested += key =>
@@ -415,8 +410,14 @@ public partial class App : Application
 
     // ── Shutdown ──────────────────────────────────────────────────────────
 
-    private async void ExitApplication()
+    /// True once ExitApplication has started — the main window skips its close prompt.
+    public bool IsExiting { get; private set; }
+
+    /// Full shutdown: ends live streams, stops the server, then quits.
+    public async void ExitApplication()
     {
+        if (IsExiting) return;
+        IsExiting = true;
         _updateTimer?.Dispose();
         foreach (var win in _projectionWindows.Values.ToList())
             win.Close();
@@ -424,14 +425,15 @@ public partial class App : Application
         if (_viewModel    != null) await _viewModel.StopServerAsync();
         if (_mediaMtx     != null) await _mediaMtx.DisposeAsync();
         if (_monitor      != null) await _monitor.DisposeAsync();
-        if (_cloudflared  != null) await _cloudflared.DisposeAsync();
-        _webPlayer?.Dispose();
         _trayIcon?.Dispose();
         Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Covers shutdowns that skip ExitApplication (e.g. Windows logoff) — never leave
+        // FFmpeg pushing to YouTube/Facebook after the app has gone
+        _viewModel?.EndAllLiveStreams();
         _trayIcon?.Dispose();
         try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
         _singleInstanceMutex?.Dispose();

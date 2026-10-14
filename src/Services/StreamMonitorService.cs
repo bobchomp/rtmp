@@ -76,6 +76,8 @@ public class StreamMonitorService : IAsyncDisposable
                             var key = settings.StreamKeys.FirstOrDefault(k => k.RtmpPath == pathName);
                             if (key != null)
                             {
+                                key.HasAudio = DetectAudio(item);
+
                                 if (_lastBytesReceived.TryGetValue(pathName, out var prevBytes))
                                 {
                                     var delta = bytesReceived - prevBytes;
@@ -156,6 +158,25 @@ public class StreamMonitorService : IAsyncDisposable
             catch (OperationCanceledException) { break; }
             catch { /* server not yet ready or network hiccup — retry next cycle */ }
         }
+    }
+
+    // MediaMTX lists codecs as "tracks": ["H264", "MPEG-4 Audio"] (older) and/or
+    // "tracks2": [{ "codec": "H264" }, ...] (newer). Null = couldn't tell.
+    private static bool? DetectAudio(JsonElement item)
+    {
+        var codecs = new List<string>();
+        if (item.TryGetProperty("tracks", out var tracks) && tracks.ValueKind == JsonValueKind.Array)
+            foreach (var t in tracks.EnumerateArray())
+                if (t.ValueKind == JsonValueKind.String) codecs.Add(t.GetString() ?? "");
+        if (item.TryGetProperty("tracks2", out var tracks2) && tracks2.ValueKind == JsonValueKind.Array)
+            foreach (var t in tracks2.EnumerateArray())
+                if (t.ValueKind == JsonValueKind.Object && t.TryGetProperty("codec", out var c))
+                    codecs.Add(c.GetString() ?? "");
+
+        if (codecs.Count == 0) return null;
+
+        string[] audioCodecs = ["Audio", "AAC", "Opus", "G711", "G722", "LPCM", "AC-3", "MP3", "Speex"];
+        return codecs.Any(c => audioCodecs.Any(a => c.Contains(a, StringComparison.OrdinalIgnoreCase)));
     }
 
     public async ValueTask DisposeAsync()
