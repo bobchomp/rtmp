@@ -36,38 +36,19 @@ public class StreamKey : INotifyPropertyChanged
         set { if (_recordEnabled == value) return; _recordEnabled = value; OnPropertyChanged(); }
     }
 
-    // ── Go Live (push to YouTube / Facebook / Twitch / custom RTMP) ──────────
+    // ── Go Live (push to any RTMP/RTMPS server: YouTube, Facebook, Twitch, …) ──
 
-    public static readonly string[] RestreamPlatforms = ["YouTube", "Facebook", "Twitch", "Custom"];
-
-    private static string? PresetServer(string platform) => platform switch
-    {
-        "YouTube"  => "rtmp://a.rtmp.youtube.com/live2",
-        "Facebook" => "rtmps://live-api-s.facebook.com:443/rtmp/",
-        "Twitch"   => "rtmp://live.twitch.tv/app",
-        _          => null
-    };
-
-    private string _restreamPlatform = "YouTube";
-    public string RestreamPlatform
-    {
-        get => _restreamPlatform;
-        set
-        {
-            _restreamPlatform = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsCustomPlatform));
-            // Presets fill in the server URL; Custom leaves whatever the user typed
-            if (PresetServer(value) is { } server)
-                RestreamServer = server;
-        }
-    }
-
-    private string _restreamServer = "rtmp://a.rtmp.youtube.com/live2";
+    private string _restreamServer = "";
     public string RestreamServer
     {
         get => _restreamServer;
-        set { _restreamServer = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasRestreamDestination)); }
+        set
+        {
+            _restreamServer = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasRestreamDestination));
+            OnPropertyChanged(nameof(RestreamDisplayName));
+        }
     }
 
     private string _restreamStreamKey = "";
@@ -110,8 +91,20 @@ public class StreamKey : INotifyPropertyChanged
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RestreamUrl { get; set; }
 
+    /// Friendly name for status/log text: "YouTube" etc. for well-known servers, else the host name.
     [JsonIgnore]
-    public bool IsCustomPlatform => RestreamPlatform == "Custom";
+    public string RestreamDisplayName
+    {
+        get
+        {
+            if (!Uri.TryCreate(RestreamServer.Trim(), UriKind.Absolute, out var uri)) return "the server";
+            var host = uri.Host.ToLowerInvariant();
+            if (host.Contains("youtube"))  return "YouTube";
+            if (host.Contains("facebook")) return "Facebook";
+            if (host.Contains("twitch"))   return "Twitch";
+            return uri.Host;
+        }
+    }
 
     [JsonIgnore]
     public bool HasRestreamDestination =>

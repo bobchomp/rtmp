@@ -52,7 +52,7 @@ public class SettingsService
     }
 
     // Older versions stored one full "rtmp://server/app/KEY" URL — split it into
-    // a Custom server + stream key so it shows up in the new Go Live fields.
+    // a server URL + stream key so it shows up in the Go Live fields.
     private void MigrateLegacyRestreamUrls()
     {
         foreach (var key in Settings.StreamKeys)
@@ -64,7 +64,6 @@ public class SettingsService
             var slash = url.LastIndexOf('/');
             if (slash <= url.IndexOf("://", StringComparison.Ordinal) + 2) continue;
 
-            key.RestreamPlatform  = "Custom";
             key.RestreamServer    = url[..slash];
             key.RestreamStreamKey = url[(slash + 1)..];
         }

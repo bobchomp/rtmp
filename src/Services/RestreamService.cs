@@ -64,7 +64,7 @@ public sealed class RestreamService
         var session = new Session { Key = key, SourceUrl = sourceUrl };
         _sessions[key.Id] = session;
         key.IsLive = true;
-        Log($"[Go Live] {key.Name} → {key.RestreamPlatform} ({key.RestreamServer})");
+        Log($"[Go Live] {key.Name} → {key.RestreamServer}");
 
         if (FindFfmpeg() == null)
         {
@@ -201,8 +201,8 @@ public sealed class RestreamService
             {
                 if (session.Process != proc) return;
                 session.FailedAttempts = 0;
-                session.Key.LiveStatus = $"● LIVE on {session.Key.RestreamPlatform}";
-                Log($"[Go Live] {session.Key.Name} is LIVE on {session.Key.RestreamPlatform}.");
+                session.Key.LiveStatus = $"● LIVE on {session.Key.RestreamDisplayName}";
+                Log($"[Go Live] {session.Key.Name} is LIVE on {session.Key.RestreamDisplayName}.");
             });
             return;
         }
@@ -233,7 +233,7 @@ public sealed class RestreamService
         if (!session.SentVideo && ++session.FailedAttempts >= MaxFailedAttempts)
         {
             var reason = string.IsNullOrEmpty(session.LastError) ? $"exit code {code}" : session.LastError;
-            EndLive(key, $"Couldn't connect to {key.RestreamPlatform}: {reason}. Check the server URL and stream key.");
+            EndLive(key, $"Couldn't connect to {key.RestreamDisplayName}: {reason}. Check the server URL and stream key.");
             return;
         }
 
