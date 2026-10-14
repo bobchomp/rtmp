@@ -350,23 +350,9 @@
                                 <Separator/>
 
                                 <TextBlock Text="RECORDING" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
-                                <CheckBox Content="Record this stream" IsChecked="{Binding RecordEnabled}" Margin="0,0,0,8"/>
-                                <Button HorizontalAlignment="Left" Margin="0,0,0,12"
-                                        Command="{Binding DataContext.ToggleRecordingCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding DataContext.SelectedStreamKey, RelativeSource={RelativeSource AncestorType=Window}}">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource BaseBtn}">
-                                            <Setter Property="Content" Value="● Start Recording"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding DataContext.SelectedStreamKey.RecordEnabled,
-                                                    RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                                    <Setter Property="Content" Value="■ Stop Recording"/>
-                                                    <Setter Property="Background" Value="{DynamicResource Danger}"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                <CheckBox Content="Record this stream" IsChecked="{Binding RecordEnabled}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Takes effect immediately — recordings are saved to the folder set on the Display tab."
+                                           Foreground="{DynamicResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
                                 <Separator/>
 
@@ -387,8 +373,33 @@
                                              FontFamily="Consolas" FontSize="12" Margin="0,0,0,8"/>
 
                                     <TextBlock Text="Stream Key" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox Text="{Binding RestreamStreamKey, UpdateSourceTrigger=PropertyChanged}"
-                                             FontFamily="Consolas" FontSize="12" Margin="0,0,0,4"/>
+                                    <!-- Hidden by default (PasswordBox) — "Show" swaps in a normal TextBox.
+                                         PasswordBox can't data-bind, so code-behind keeps it in sync. -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <PasswordBox x:Name="RestreamKeyBox" FontFamily="Consolas" FontSize="12"
+                                                     PasswordChanged="RestreamKeyBox_PasswordChanged"
+                                                     DataContextChanged="RestreamKeyBox_DataContextChanged">
+                                            <PasswordBox.Style>
+                                                <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsChecked, ElementName=ShowStreamKeyCheck}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </PasswordBox.Style>
+                                        </PasswordBox>
+                                        <TextBox Text="{Binding RestreamStreamKey, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontFamily="Consolas" FontSize="12"
+                                                 Visibility="{Binding IsChecked, ElementName=ShowStreamKeyCheck,
+                                                     Converter={StaticResource BoolToVisConverter}}"/>
+                                        <CheckBox x:Name="ShowStreamKeyCheck" Grid.Column="1" Content="Show"
+                                                  Margin="8,0,0,0" Unchecked="ShowStreamKeyCheck_Unchecked"/>
+                                    </Grid>
                                     <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="11"
                                                TextWrapping="Wrap" Margin="0,0,0,10">
                                         <TextBlock.Style>
@@ -542,7 +553,7 @@
                                           IsChecked="{Binding Settings.AutoProjectOnConnect}"
                                           Margin="0,0,0,8"/>
 
-                                <TextBlock Text="Tip: You can also manually open a projection window by right-clicking a live stream key."
+                                <TextBlock Text="Tip: you can also open a projection window yourself with the ▶ Open Projection Window button on a stream key. Streams on unrecognised paths are never projected automatically."
                                            Foreground="{DynamicResource TextMuted}" FontSize="11" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
@@ -569,7 +580,7 @@
                                 </Grid>
 
                                 <!-- Feature 6: Disk space indicator (hidden when DiskSpaceText is empty) -->
-                                <TextBlock x:Name="DiskSpaceLabel"
+                                <TextBlock
                                            Text="{Binding DiskSpaceText}"
                                            FontSize="12" Margin="0,4,0,0">
                                     <TextBlock.Style>
@@ -598,7 +609,7 @@
                                 <CheckBox Content="Automatically start the RTMP server on launch"
                                           IsChecked="{Binding Settings.AutoStartServer}"
                                           Margin="0,0,0,8"/>
-                                <CheckBox Content="Auto-start with Windows (minimised to tray)"
+                                <CheckBox Content="Start automatically when Windows starts"
                                           IsChecked="{Binding Settings.AutoStartWithWindows}"/>
                             </StackPanel>
                         </Border>
@@ -648,8 +659,8 @@
 
                                 <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="12" TextWrapping="Wrap">
                                     Publishers connect with:<LineBreak/>
-                                    <Run FontFamily="Consolas" FontSize="12"
-                                         Foreground="{DynamicResource Accent}">rtmp://&lt;your-ip&gt;:1935/live/&lt;stream-key&gt;</Run>
+                                    <Run FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource Accent}"
+                                         Text="{Binding Settings.RtmpPort, Mode=OneWay, StringFormat='rtmp://&lt;your-ip&gt;:{0}/live/&lt;stream-key&gt;'}"/>
                                 </TextBlock>
                             </StackPanel>
                         </Border>

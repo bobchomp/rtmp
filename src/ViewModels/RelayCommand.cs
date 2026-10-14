@@ -12,6 +12,4 @@ public class RelayCommand(Action<object?> execute, Func<object?, bool>? canExecu
 
     public bool CanExecute(object? parameter) => canExecute?.Invoke(parameter) ?? true;
     public void Execute(object? parameter) => execute(parameter);
-
-    public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }

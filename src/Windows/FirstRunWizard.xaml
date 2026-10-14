@@ -82,8 +82,9 @@
             <TextBlock TextWrapping="Wrap"
                        Foreground="{DynamicResource TextMuted}"
                        FontSize="11">
-                Copy this URL into OBS → Settings → Stream → Server, and set the
-                stream key field to your stream key value.
+                Enter this full URL as the custom RTMP address in your drone app or
+                encoder. In OBS, use everything up to "/live" as the Server and the
+                rest as the Stream Key.
             </TextBlock>
         </StackPanel>
 

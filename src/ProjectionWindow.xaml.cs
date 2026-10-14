@@ -20,7 +20,8 @@ public partial class ProjectionWindow : Window
     private readonly DispatcherTimer _hudTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
     // Auto-reconnect state
-    private bool _isClosingIntentionally;
+    private bool _isClosingIntentionally;   // window is closing — never play again
+    private bool _streamOffline;            // publisher left — wait for ResumePlayback()
     private bool _isSwitching;
     private readonly DispatcherTimer _reconnectTimer;
     private int _reconnectAttempts;
@@ -32,6 +33,7 @@ public partial class ProjectionWindow : Window
 
     public StreamKey? CurrentKey => _currentKey;
     public int MonitorIndex { get; private set; }
+    private readonly WinForms.Screen _screen;
 
     public ProjectionWindow(string rtmpUrl, StreamKey key, WinForms.Screen? monitor = null,
         Func<StreamKey, string>? buildRtmpUrl = null,
@@ -49,6 +51,7 @@ public partial class ProjectionWindow : Window
             : allScreens[0]);
         MonitorIndex = Array.IndexOf(allScreens, resolvedScreen);
         if (MonitorIndex < 0) MonitorIndex = 0;
+        _screen = resolvedScreen;
 
         InitializeComponent();
         PositionOnMonitor(resolvedScreen);
@@ -125,6 +128,13 @@ public partial class ProjectionWindow : Window
                 if (!_isClosingIntentionally) StartReconnect();
             });
 
+            // A failed open can be reported only as an error — keep retrying
+            _player.EncounteredError += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                WaitingPanel.Visibility = Visibility.Visible;
+                if (!_isClosingIntentionally) StartReconnect();
+            });
+
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
             {
                 _videoPanel = new WinForms.Panel { BackColor = System.Drawing.Color.Black };
@@ -153,6 +163,8 @@ public partial class ProjectionWindow : Window
 
     private void BeginPlay()
     {
+        // Can be queued by a timer/dispatcher after the window closed or the stream left
+        if (_isClosingIntentionally || _streamOffline || _player == null || _libVlc == null) return;
         _media?.Dispose();
         // Caching options are per-media (prefixed ':'), not global LibVLC args.
         _media = new LibVLCSharp.Shared.Media(_libVlc!, _rtmpUrl, FromType.FromLocation,
@@ -166,7 +178,7 @@ public partial class ProjectionWindow : Window
 
     private void StartReconnect()
     {
-        if (_isClosingIntentionally) return;
+        if (_isClosingIntentionally || _streamOffline || _reconnectTimer.IsEnabled) return;
         _reconnectAttempts++;
         var intervalSeconds = Math.Min(30, 3 * _reconnectAttempts);
         _reconnectTimer.Interval = TimeSpan.FromSeconds(intervalSeconds);
@@ -177,7 +189,6 @@ public partial class ProjectionWindow : Window
     private void OnReconnectTick(object? sender, EventArgs e)
     {
         _reconnectTimer.Stop();
-        if (_isClosingIntentionally) return;
         BeginPlay();
     }
 
@@ -189,11 +200,23 @@ public partial class ProjectionWindow : Window
         _currentKey = key;
         _reconnectTimer.Stop();
         _reconnectAttempts = 0;
+        _streamOffline = false;
         StreamNameLabel.Text = $"LIVE  ·  {key.Name}";
         WaitingUrlLabel.Text = rtmpUrl;
         WaitingPanel.Visibility = Visibility.Visible;
-        _isSwitching = true;
-        _player?.Stop(); // Stopped handler fires BeginPlay() when _isSwitching is true
+        // If something is playing, stop it and let the Stopped handler start the new stream.
+        // VLC raises no Stopped event when already stopped (e.g. waiting for a reconnect),
+        // so in that case start the new stream directly.
+        if (_player?.State is VLCState.Playing or VLCState.Opening or VLCState.Buffering or VLCState.Paused)
+        {
+            _isSwitching = true;
+            _player.Stop();
+        }
+        else
+        {
+            _isSwitching = false;
+            BeginPlay();
+        }
     }
 
     private void CycleStream()
@@ -201,7 +224,7 @@ public partial class ProjectionWindow : Window
         if (_buildRtmpUrl == null || _getStreamKeys == null) return;
         var active = _getStreamKeys().Where(k => k.IsActive).ToList();
         if (active.Count < 2) return;
-        var idx = _currentKey != null ? active.FindIndex(k => k.Key == _currentKey.Key) : -1;
+        var idx = _currentKey != null ? active.FindIndex(k => k.RtmpPath == _currentKey.RtmpPath) : -1;
         var next = active[(idx + 1) % active.Count];
         SwitchToStream(_buildRtmpUrl(next), next);
     }
@@ -212,18 +235,29 @@ public partial class ProjectionWindow : Window
         var active = _getStreamKeys().Where(k => k.IsActive).ToList();
         if (zeroBasedIndex >= active.Count) return;
         var next = active[zeroBasedIndex];
-        if (next.Key == _currentKey?.Key) return;
+        if (next.RtmpPath == _currentKey?.RtmpPath) return;
         SwitchToStream(_buildRtmpUrl(next), next);
     }
 
     // ── Cleanup ────────────────────────────────────────────────────────────
 
+    /// The stream went offline — stop and wait (no reconnect attempts) until ResumePlayback.
     public void StopPlayback()
     {
-        _isClosingIntentionally = true;
+        _streamOffline = true;
         _reconnectTimer.Stop();
         _player?.Stop();
         WaitingPanel.Visibility = Visibility.Visible;
+        StreamNameLabel.Text = $"Waiting for {_currentKey?.Name} to reconnect…";
+    }
+
+    /// The stream is back — start playing again.
+    public void ResumePlayback()
+    {
+        if (_isClosingIntentionally || !_streamOffline) return;
+        _streamOffline = false;
+        _reconnectAttempts = 0;
+        BeginPlay();
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -325,13 +359,16 @@ public partial class ProjectionWindow : Window
             ResizeMode  = ResizeMode.CanResize;
             Width  = 960;
             Height = 540;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            // Centre on the same monitor (WindowStartupLocation has no effect once shown)
+            var area = _screen.WorkingArea;
+            Left = area.Left + (area.Width  - Width)  / 2;
+            Top  = area.Top  + (area.Height - Height) / 2;
         }
         else
         {
             WindowStyle = WindowStyle.None;
             ResizeMode  = ResizeMode.NoResize;
-            PositionOnMonitor(NonPrimaryOrFirst());
+            PositionOnMonitor(_screen);
         }
         _isFullBorderless = !_isFullBorderless;
     }

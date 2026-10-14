@@ -77,12 +77,14 @@
                          Margin="0,0,0,12">
                 <ProgressBar.Template>
                     <ControlTemplate TargetType="ProgressBar">
-                        <Border CornerRadius="4" Background="{TemplateBinding Background}">
+                        <!-- PART_Track is required: WPF sizes PART_Indicator relative to it -->
+                        <Grid>
+                            <Border x:Name="PART_Track" CornerRadius="4" Background="{TemplateBinding Background}"/>
                             <Border x:Name="PART_Indicator"
                                     Background="{TemplateBinding Foreground}"
                                     HorizontalAlignment="Left"
                                     CornerRadius="4"/>
-                        </Border>
+                        </Grid>
                     </ControlTemplate>
                 </ProgressBar.Template>
             </ProgressBar>
@@ -114,7 +116,7 @@
                     </TextBlock>
                     <TextBlock Foreground="{StaticResource TextPrim}" FontSize="13" Margin="0,0,0,8">
                         <Run FontWeight="Bold" Foreground="{StaticResource Accent}">2. </Run>
-                        <Run>A PowerShell window may flash briefly — this is normal.</Run>
+                        <Run>The installer shows a small progress window while it updates.</Run>
                     </TextBlock>
                     <TextBlock Foreground="{StaticResource TextPrim}" FontSize="13" Margin="0,0,0,8">
                         <Run FontWeight="Bold" Foreground="{StaticResource Accent}">3. </Run>
@@ -123,11 +125,9 @@
                     <Separator Margin="0,8"/>
                     <TextBlock Foreground="{StaticResource TextMuted}" FontSize="11"
                                TextWrapping="Wrap">
-                        Windows may show a SmartScreen warning because the update
-                        script is not code-signed. Click "More info → Run anyway" if prompted.
+                        The download has been checked against the release on GitHub.
+                        Any live stream or recording will stop while the update installs.
                     </TextBlock>
-                    <TextBlock x:Name="InstallLogHint" Foreground="{StaticResource TextMuted}"
-                               FontSize="10" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
 
@@ -136,9 +136,14 @@
                         Content="Run Installer" Click="BtnInstall_Click"/>
                 <Button Style="{StaticResource GhostBtn}" Content="Not Now"
                         Margin="12,0,0,0" Click="BtnLater_Click"/>
-                <Button Style="{StaticResource GhostBtn}" Content="View Log"
-                        Margin="12,0,0,0" Click="OpenLogFolder_Click"/>
             </StackPanel>
+        </StackPanel>
+
+        <!-- ══ SCREEN: checking ════════════════════════════════════════ -->
+        <StackPanel x:Name="ScreenChecking" Visibility="Collapsed"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="Checking for updates…" FontSize="16"
+                       Foreground="{StaticResource TextPrim}" HorizontalAlignment="Center"/>
         </StackPanel>
 
         <!-- ══ SCREEN: up to date ══════════════════════════════════════ -->

@@ -1,10 +1,8 @@
 using System.IO;
-using System.Net.Sockets;
-using System.Net;
 using System.Reflection;
 using System.Text.Json;
-using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using Hardcodet.Wpf.TaskbarNotification;
 using RTMPProjector.Models;
 using RTMPProjector.Services;
@@ -28,7 +26,7 @@ public partial class App : Application
     private StreamMonitorService? _monitor;
     private MainViewModel? _viewModel;
     private MainWindow? _mainWindow;
-    private readonly Dictionary<string, ProjectionWindow> _projectionWindows = new();
+    private readonly List<ProjectionWindow> _projectionWindows = [];
 
     // ── Updater state (mirrors main.js) ───────────────────────────────────
     private UpdaterService? _updater;
@@ -36,31 +34,41 @@ public partial class App : Application
     private UpdateInfo? _pendingUpdateInfo;
     private string? _downloadedAssetPath;
     private UpdateStatus _updateStatus = UpdateStatus.Idle;
-    private System.Threading.Timer? _updateTimer;
+    private DispatcherTimer? _updateTimer;
+
+    private static readonly string AppVersion = UpdaterService.NormaliseVersion(
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0");
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         // ── Single-instance enforcement ───────────────────────────────────
+        // Open/create the activation event *before* taking the mutex, so a second
+        // instance can always signal the first one to show itself.
+        var activateEvent = new EventWaitHandle(
+            initialState: false, EventResetMode.AutoReset, ActivateEvtName);
+
         _singleInstanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
         if (!createdNew)
         {
             // Another instance is already running — signal it to show itself, then quit.
-            try { EventWaitHandle.OpenExisting(ActivateEvtName).Set(); } catch { }
+            activateEvent.Set();
+            activateEvent.Dispose();
             _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
             Shutdown();
             return;
         }
 
-        // Watch for activation signals from future instances on a background thread.
-        var activateEvent = new EventWaitHandle(
-            initialState: false, EventResetMode.AutoReset, ActivateEvtName);
-        ThreadPool.QueueUserWorkItem(_ =>
+        // Watch for activation signals from future instances.
+        new Thread(() =>
         {
             while (activateEvent.WaitOne())
                 Dispatcher.BeginInvoke(ShowMainWindow);
-        });
+        }) { IsBackground = true, Name = "SingleInstanceActivation" }.Start();
 
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             WriteCrashLog(ex.ExceptionObject?.ToString() ?? "Unknown error");
@@ -111,21 +119,18 @@ public partial class App : Application
         _viewModel = new MainViewModel(_settingsService, _mediaMtx, _monitor);
         _viewModel.StreamBecameActive      += OnStreamBecameActive;
         _viewModel.StreamBecameInactive    += OnStreamBecameInactive;
-        _viewModel.OpenProjectionRequested += key =>
-            OpenProjectionManually(_viewModel.BuildRtmpUrl(key), key);
+        _viewModel.OpenProjectionRequested += OpenProjectionManually;
 
         _mainWindow = new MainWindow(_viewModel);
 
         StartUpdater();
         BuildTrayIcon();
 
-        if (_settingsService.Settings.StartMinimized)
-            return;
-
-        _mainWindow.Show();
-
         if (_settingsService.Settings.AutoStartServer)
             _ = _viewModel.StartServerAsync();
+
+        if (!_settingsService.Settings.StartMinimized)
+            _mainWindow.Show();
     }
 
     // Feature 10: Theme switching
@@ -161,6 +166,10 @@ public partial class App : Application
             var version = root.GetProperty("version").GetString() ?? "";
             var notes   = root.GetProperty("notes").GetString() ?? "";
 
+            // The file is written just before installing — if the install failed we're
+            // still on the old version, so don't claim the update happened
+            if (UpdaterService.NormaliseVersion(version) != AppVersion) return;
+
             new WhatsNewDialog(version, notes).ShowDialog();
         }
         catch { }
@@ -179,87 +188,179 @@ public partial class App : Application
         catch { return "127.0.0.1"; }
     }
 
-    // ── Updater (mirrors startUpdater + onUpdateAvailable in main.js) ─────
+    // ── Updater ───────────────────────────────────────────────────────────
+    // State machine: Idle → Available → Downloading → Ready. App owns it; the
+    // UpdateWindow just displays it and calls back in.
 
     private void StartUpdater()
     {
-        var version = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? "0.0.0";
+        _updater = new UpdaterService(AppVersion);
+        _updater.OnProgress = p   => Dispatcher.BeginInvoke(() =>
+        {
+            if (_updateStatus == UpdateStatus.Downloading) _updateWindow?.ShowProgress(p);
+        });
+        _updater.LogMessage = msg => _viewModel?.AddLogEntry(msg);
 
-        _updater = new UpdaterService(version);
-        _updater.OnUpdateAvailable = info => Dispatcher.Invoke(() => OnUpdateAvailable(info));
-        _updater.OnProgress        = p    => Dispatcher.Invoke(() => _updateWindow?.ShowProgress(p));
-        _updater.OnComplete        = path => Dispatcher.Invoke(() => OnUpdateComplete(path));
-        _updater.OnError           = msg  => Dispatcher.Invoke(() => OnUpdateError(msg));
-        _updater.LogMessage        = msg  => _viewModel?.AddLogEntry(msg);
-
-        // Silent background check on startup, then every 60 minutes
-        _ = _updater.CheckForUpdateAsync(silent: true);
-        _updateTimer = new System.Threading.Timer(
-            _ => Dispatcher.Invoke(() => _ = _updater.CheckForUpdateAsync(silent: true)),
-            null,
-            TimeSpan.FromMinutes(60),
-            TimeSpan.FromMinutes(60));
+        // Background check on startup, then every 60 minutes
+        _ = CheckForUpdatesAsync(manual: false);
+        _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(60) };
+        _updateTimer.Tick += (_, _) => _ = CheckForUpdatesAsync(manual: false);
+        _updateTimer.Start();
     }
 
-    private void OnUpdateAvailable(UpdateInfo? info)
-    {
-        if (info == null) return;  // silent check found nothing — stay quiet
+    /// Tray / Server tab "Check for Updates".
+    public void ManualCheckForUpdates() => _ = CheckForUpdatesAsync(manual: true);
 
-        _pendingUpdateInfo = info;
-        _updateStatus      = UpdateStatus.Available;
-        RebuildTrayMenu();
-        OpenUpdateWindow();
-        _updateWindow!.ShowUpdateInfo(info);
-    }
+    private bool _checking;
+    private bool _manualCheckWaiting;   // user clicked "Check" while a background check was running
 
-    private void OnUpdateComplete(string assetPath)
-    {
-        _downloadedAssetPath = assetPath;
-        _updateStatus = UpdateStatus.Ready;
-        RebuildTrayMenu();
-        _updateWindow?.ShowDone(assetPath, _pendingUpdateInfo);
-    }
-
-    private void OnUpdateError(string message)
-    {
-        _updateStatus = UpdateStatus.Idle;
-        RebuildTrayMenu();
-        _updateWindow?.ShowError(message);
-    }
-
-    /// <summary>Mirrors manualCheckForUpdates() in main.js.</summary>
-    public void ManualCheckForUpdates()
+    private async Task CheckForUpdatesAsync(bool manual)
     {
         if (_updater == null) return;
-        OpenUpdateWindow();
-        _updateWindow!.ShowChecking();
-
-        _updater.OnUpdateAvailable = info => Dispatcher.Invoke(() =>
+        if (_checking)
         {
+            if (manual)
+            {
+                _manualCheckWaiting = true;
+                OpenUpdateWindow();
+                _updateWindow!.ShowChecking();
+            }
+            return;
+        }
+
+        // Already downloading / downloaded — just show where we are
+        if (_updateStatus is UpdateStatus.Downloading or UpdateStatus.Ready)
+        {
+            if (manual) OpenUpdateWindow();
+            return;
+        }
+
+        if (manual)
+        {
+            OpenUpdateWindow();
+            _updateWindow!.ShowChecking();
+        }
+
+        _checking = true;
+        try
+        {
+            var info = await _updater.CheckForUpdateAsync();
+            manual |= _manualCheckWaiting;
+            if (_updateStatus is UpdateStatus.Downloading or UpdateStatus.Ready) return;
+
             if (info == null)
             {
-                _updateStatus = UpdateStatus.Idle;
-                _updateWindow?.ShowUpdateInfo(null);  // shows up-to-date screen
+                _updateStatus      = UpdateStatus.Idle;
+                _pendingUpdateInfo = null;
+                RebuildTrayMenu();
+                if (manual) _updateWindow?.ShowUpdateInfo(null);
+                return;
             }
-            else
-            {
-                OnUpdateAvailable(info);
-            }
-        });
 
-        _ = _updater.CheckForUpdateAsync(silent: false);
+            // Pop up once per new version — hourly re-checks of a version the user
+            // already dismissed stay quiet (it's still in the tray menu)
+            var isNewVersion = _pendingUpdateInfo?.Version != info.Version;
+            _pendingUpdateInfo = info;
+            _updateStatus      = UpdateStatus.Available;
+            RebuildTrayMenu();
+
+            if (manual)
+            {
+                _updateWindow?.ShowUpdateInfo(info);
+            }
+            else if (isNewVersion)
+            {
+                // Never steal focus from a live projection — just show a tray balloon
+                if (_projectionWindows.Any(w => w.IsLoaded))
+                    _trayIcon?.ShowBalloonTip("Update Available",
+                        $"RTMP Projector v{info.Version} is available — see the tray menu.", BalloonIcon.Info);
+                else
+                {
+                    OpenUpdateWindow();
+                    _updateWindow!.ShowUpdateInfo(info);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (manual || _manualCheckWaiting) _updateWindow?.ShowError(ex.Message);   // background checks just log
+        }
+        finally
+        {
+            _checking = false;
+            _manualCheckWaiting = false;
+        }
+    }
+
+    private async void DownloadUpdate()
+    {
+        if (_updater == null || _pendingUpdateInfo == null || _updateStatus != UpdateStatus.Available) return;
+
+        _updateStatus = UpdateStatus.Downloading;
+        RebuildTrayMenu();
+        _updateWindow?.ShowDownloadStarting();
+
+        try
+        {
+            _downloadedAssetPath = await _updater.DownloadUpdateAsync(_pendingUpdateInfo);
+            _updateStatus = UpdateStatus.Ready;
+            _updateWindow?.ShowDone();
+        }
+        catch (Exception ex)
+        {
+            _viewModel?.AddLogEntry($"[Updater] Download failed: {ex.Message}");
+            _updateStatus = UpdateStatus.Available;   // can try again
+            _updateWindow?.ShowError(ex.Message);
+        }
+        RebuildTrayMenu();
+    }
+
+    private void InstallUpdate()
+    {
+        if (_updater == null || _downloadedAssetPath == null || _updateStatus != UpdateStatus.Ready) return;
+
+        try
+        {
+            WriteWhatsNewFile(_pendingUpdateInfo);
+            _updater.LaunchSetupInstaller(_downloadedAssetPath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Failed to launch installer:\n\n{ex.Message}\n\n" +
+                $"You can install manually from:\n{_downloadedAssetPath}",
+                "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        // Shut down properly straight away (ends live streams, stops the server) so the
+        // installer can replace our files — IsExiting is set before anything else, so
+        // the installer's own close request won't trigger the "Minimise or Quit?" prompt
+        ExitApplication();
+    }
+
+    private static void WriteWhatsNewFile(UpdateInfo? info)
+    {
+        if (info == null) return;
+        try
+        {
+            var path = Path.Combine(Path.GetTempPath(), "rtmprojector_whatsnew.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(new { version = info.Version, notes = info.ReleaseNotes }));
+        }
+        catch { }
     }
 
     private void OpenUpdateWindow()
     {
-        if (_updateWindow == null || !_updateWindow.IsLoaded)
-            _updateWindow = new UpdateWindow(_updater!);
+        if (_updateWindow == null)
+            _updateWindow = new UpdateWindow(_updater!, ManualCheckForUpdates, DownloadUpdate, InstallUpdate);
 
-        // Restore the "ready to install" state if the window was recreated after download
-        if (_updateStatus == UpdateStatus.Ready && _downloadedAssetPath != null)
-            _updateWindow.ShowDone(_downloadedAssetPath, _pendingUpdateInfo);
+        switch (_updateStatus)
+        {
+            case UpdateStatus.Ready:       _updateWindow.ShowDone(); break;
+            case UpdateStatus.Available:   _updateWindow.ShowUpdateInfo(_pendingUpdateInfo); break;
+            // Downloading: the window is already showing progress
+        }
 
         _updateWindow.Show();
         _updateWindow.Activate();
@@ -308,15 +409,15 @@ public partial class App : Application
         {
             case UpdateStatus.Available:
                 AddSep();
-                Add($"⬆  Update Available (v{_pendingUpdateInfo?.Version})", () =>
-                {
-                    OpenUpdateWindow();
-                    _updateWindow!.ShowUpdateInfo(_pendingUpdateInfo);
-                });
+                Add($"⬆  Update Available (v{_pendingUpdateInfo?.Version})", OpenUpdateWindow);
+                break;
+            case UpdateStatus.Downloading:
+                AddSep();
+                Add("⬆  Downloading Update…", OpenUpdateWindow);
                 break;
             case UpdateStatus.Ready:
                 AddSep();
-                Add("⬆  Update Ready — Install Now", () => _updateWindow?.Show());
+                Add("⬆  Update Ready — Install Now", OpenUpdateWindow);
                 break;
             default:
                 AddSep();
@@ -346,66 +447,70 @@ public partial class App : Application
         _mainWindow.Activate();
     }
 
+    // Open projection window currently showing this stream (it may have been switched with Tab/1–9)
+    private ProjectionWindow? FindProjection(StreamKey key) =>
+        _projectionWindows.FirstOrDefault(w => w.IsLoaded && w.CurrentKey?.RtmpPath == key.RtmpPath);
+
     private void OnStreamBecameActive(StreamKey key)
     {
+        // A window already showing this stream (e.g. after a drone drop-out) just resumes
+        if (FindProjection(key) is { } existing)
+        {
+            existing.ResumePlayback();
+            return;
+        }
+
         if (!_settingsService!.Settings.AutoProjectOnConnect) return;
 
-        // Already projecting this key — do nothing
-        if (_projectionWindows.TryGetValue(key.Key, out var existing) && existing.IsLoaded)
-            return;
+        // Streams that don't match a configured key are never put fullscreen
+        // automatically — anyone on the network could otherwise take over the screen
+        if (key.ExplicitPath != null) return;
 
-        // Pick a monitor not already used by an open projection window
-        var usedIndices = _projectionWindows.Values
+        // Prefer the monitor chosen on the Display tab; if a projection already uses it
+        // (several drones at once), fall back to the next free monitor
+        var usedIndices = _projectionWindows
             .Where(w => w.IsLoaded)
             .Select(w => w.MonitorIndex)
             .ToHashSet();
 
         var allScreens = WinForms.Screen.AllScreens;
-        var screen = allScreens.FirstOrDefault(s =>
-        {
-            var idx = Array.IndexOf(allScreens, s);
-            return !usedIndices.Contains(idx);
-        }) ?? _viewModel!.SelectedMonitor?.Screen ?? WinForms.Screen.AllScreens[0];
+        var chosen     = _viewModel!.SelectedMonitor;
+        var screen = chosen != null && !usedIndices.Contains(chosen.Index) && chosen.Index < allScreens.Length
+            ? allScreens[chosen.Index]
+            : allScreens.Where((_, idx) => !usedIndices.Contains(idx)).FirstOrDefault()
+              ?? chosen?.Screen ?? allScreens[0];
 
+        ShowProjection(key, screen);
+        _trayIcon?.ShowBalloonTip("Stream Live", $"Now projecting: {key.Name}", BalloonIcon.Info);
+    }
+
+    private void OnStreamBecameInactive(StreamKey key)
+    {
+        FindProjection(key)?.StopPlayback();
+        _trayIcon?.ShowBalloonTip("Stream Ended", $"{key.Name} disconnected.", BalloonIcon.Info);
+    }
+
+    public void OpenProjectionManually(StreamKey key)
+    {
+        FindProjection(key)?.Close();
+        ShowProjection(key, _viewModel!.SelectedMonitor?.Screen);
+    }
+
+    private void ShowProjection(StreamKey key, WinForms.Screen? screen)
+    {
         var win = new ProjectionWindow(
             rtmpUrl: _viewModel!.BuildRtmpUrl(key),
             key: key,
             monitor: screen,
             buildRtmpUrl: k => _viewModel.BuildRtmpUrl(k),
             getStreamKeys: () => _viewModel.StreamKeys);
-        _projectionWindows[key.Key] = win;
-        win.Closed += (_, _) => _projectionWindows.Remove(key.Key);
+        _projectionWindows.Add(win);
+        win.Closed += (_, _) => _projectionWindows.Remove(win);
         win.Show();
 
-        _trayIcon?.ShowBalloonTip("Stream Live", $"Now projecting: {key.Name}", BalloonIcon.Info);
-    }
-
-    private void OnStreamBecameInactive(StreamKey key)
-    {
-        if (_projectionWindows.TryGetValue(key.Key, out var win))
+        // Opened while the stream is offline — wait for it rather than retrying forever
+        if (key.ExplicitPath == null && !key.IsActive)
             win.StopPlayback();
-
-        _trayIcon?.ShowBalloonTip("Stream Ended", $"{key.Name} disconnected.", BalloonIcon.Info);
-    }
-
-    public void OpenProjectionManually(string rtmpUrl, StreamKey key)
-    {
-        if (_projectionWindows.TryGetValue(key.Key, out var oldWin))
-        {
-            oldWin.StopPlayback();
-            oldWin.Close();
-        }
-
-        var monitor = _viewModel!.SelectedMonitor;
-        var win = new ProjectionWindow(
-            rtmpUrl: rtmpUrl,
-            key: key,
-            monitor: monitor?.Screen,
-            buildRtmpUrl: k => _viewModel.BuildRtmpUrl(k),
-            getStreamKeys: () => _viewModel.StreamKeys);
-        _projectionWindows[key.Key] = win;
-        win.Closed += (_, _) => _projectionWindows.Remove(key.Key);
-        win.Show();
     }
 
     // ── Shutdown ──────────────────────────────────────────────────────────
@@ -418,15 +523,26 @@ public partial class App : Application
     {
         if (IsExiting) return;
         IsExiting = true;
-        _updateTimer?.Dispose();
-        foreach (var win in _projectionWindows.Values.ToList())
-            win.Close();
-        _projectionWindows.Clear();
-        if (_viewModel    != null) await _viewModel.StopServerAsync();
-        if (_mediaMtx     != null) await _mediaMtx.DisposeAsync();
-        if (_monitor      != null) await _monitor.DisposeAsync();
-        _trayIcon?.Dispose();
-        Shutdown();
+        try
+        {
+            _updateTimer?.Stop();
+            foreach (var win in _projectionWindows.ToList())
+                win.Close();
+            _projectionWindows.Clear();
+            if (_viewModel != null) await _viewModel.StopServerAsync();
+            if (_mediaMtx  != null) await _mediaMtx.DisposeAsync();
+            if (_monitor   != null) await _monitor.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog($"Error during shutdown (continuing):\n{ex}");
+        }
+        finally
+        {
+            // Always actually quit — otherwise a ghost process holds the single-instance lock
+            _trayIcon?.Dispose();
+            Shutdown();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
