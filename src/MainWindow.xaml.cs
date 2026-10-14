@@ -92,4 +92,30 @@ public partial class MainWindow : Window
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
         => _vm.ClearLog();
+
+    // ── Go Live stream key (PasswordBox can't data-bind) ──────────────────
+
+    private bool _syncingKeyBox;
+
+    private void SyncKeyBoxFromModel()
+    {
+        if (RestreamKeyBox == null) return;   // can fire while the window is still being built
+        _syncingKeyBox = true;
+        RestreamKeyBox.Password = (RestreamKeyBox.DataContext as Models.StreamKey)?.RestreamStreamKey ?? "";
+        _syncingKeyBox = false;
+    }
+
+    // Selected stream key changed
+    private void RestreamKeyBox_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        => SyncKeyBoxFromModel();
+
+    // Edited while visible in the plain TextBox — refresh the hidden box
+    private void ShowStreamKeyCheck_Unchecked(object sender, RoutedEventArgs e)
+        => SyncKeyBoxFromModel();
+
+    private void RestreamKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_syncingKeyBox && RestreamKeyBox.DataContext is Models.StreamKey key)
+            key.RestreamStreamKey = RestreamKeyBox.Password;
+    }
 }

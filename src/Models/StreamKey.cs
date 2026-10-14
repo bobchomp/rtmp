@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace RTMPProjector.Models;
@@ -27,7 +29,12 @@ public class StreamKey : INotifyPropertyChanged
     [JsonIgnore]
     public string RtmpPath => ExplicitPath ?? $"live/{Key}";
 
-    public bool RecordEnabled { get; set; } = false;
+    private bool _recordEnabled;
+    public bool RecordEnabled
+    {
+        get => _recordEnabled;
+        set { if (_recordEnabled == value) return; _recordEnabled = value; OnPropertyChanged(); }
+    }
 
     // ── Go Live (push to YouTube / Facebook / Twitch / custom RTMP) ──────────
 
@@ -64,10 +71,39 @@ public class StreamKey : INotifyPropertyChanged
     }
 
     private string _restreamStreamKey = "";
+    /// The platform stream key. Never written to settings.json in plain text —
+    /// see RestreamStreamKeyProtected.
+    [JsonIgnore]
     public string RestreamStreamKey
     {
         get => _restreamStreamKey;
         set { _restreamStreamKey = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasRestreamDestination)); }
+    }
+
+    /// What settings.json stores: the stream key encrypted with Windows DPAPI for the
+    /// current user, so copying the file to another account/PC doesn't leak it.
+    public string RestreamStreamKeyProtected
+    {
+        get => Protect(_restreamStreamKey);
+        set => _restreamStreamKey = Unprotect(value);
+    }
+
+    private static string Protect(string plain)
+    {
+        if (string.IsNullOrEmpty(plain)) return "";
+        var bytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(plain), null, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(bytes);
+    }
+
+    private static string Unprotect(string protectedValue)
+    {
+        if (string.IsNullOrEmpty(protectedValue)) return "";
+        try
+        {
+            var bytes = ProtectedData.Unprotect(Convert.FromBase64String(protectedValue), null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch { return ""; }   // different user/PC — the key has to be re-entered
     }
 
     /// Legacy single-URL field from older versions — migrated on load, then cleared.

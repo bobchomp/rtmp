@@ -8,9 +8,9 @@ public class UpdateInfo
     public string DownloadUrl { get; init; } = "";
     public long SizeBytes { get; init; }
     public string ReleaseNotes { get; init; } = "";
-    public string ReleaseUrl { get; init; } = "";
 
-    public bool IsInstaller { get; init; }   // true = Setup.exe, false = zip
+    /// Lower-case hex SHA-256 published by GitHub for the asset ("" if not published).
+    public string Sha256 { get; init; } = "";
 
     public string SizeMb => $"{SizeBytes / 1_048_576.0:F1} MB";
 }

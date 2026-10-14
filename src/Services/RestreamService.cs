@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using RTMPProjector.Models;
@@ -14,7 +13,7 @@ namespace RTMPProjector.Services;
 /// Once the user presses Go Live a key stays "live" until they press End Live —
 /// if the drone drops out, FFmpeg is restarted automatically when it reconnects.
 /// </summary>
-public sealed class RestreamService : IDisposable
+public sealed class RestreamService
 {
     private const string FfmpegExeName = "ffmpeg.exe";
 
@@ -333,22 +332,39 @@ public sealed class RestreamService : IDisposable
 
     private static async Task DownloadAndExtractAsync(string url, string zipPath)
     {
-        using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
+        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("RTMPProjector", "1.0"));
+
+        // Never run an unverified binary: fetch the publisher's checksum first
+        var expected = await GetPublishedSha256Async(http, url);
+
+        using (var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
         {
-            http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("RTMPProjector", "1.0"));
-            using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             await using var fs = File.Create(zipPath);
             await response.Content.CopyToAsync(fs);
         }
 
-        // Pull out just bin/ffmpeg.exe — the rest of the zip isn't needed
-        using var zip = ZipFile.OpenRead(zipPath);
-        var entry = zip.Entries.FirstOrDefault(e =>
-            e.FullName.EndsWith("/bin/" + FfmpegExeName, StringComparison.OrdinalIgnoreCase));
-        if (entry == null) throw new FileNotFoundException("ffmpeg.exe not found inside the download.");
-        entry.ExtractToFile(Path.Combine(AppDir, FfmpegExeName), overwrite: true);
+        await DownloadVerifier.VerifySha256Async(zipPath, expected);
+        DownloadVerifier.ExtractEntry(zipPath, "/bin/" + FfmpegExeName, Path.Combine(AppDir, FfmpegExeName));
     }
 
-    public void Dispose() => EndAll();
+    // gyan.dev publishes "<zip>.sha256"; BtbN publishes "checksums.sha256" ("<hash>  <file>" per line)
+    private static async Task<string> GetPublishedSha256Async(HttpClient http, string zipUrl)
+    {
+        if (zipUrl.Contains("gyan.dev", StringComparison.OrdinalIgnoreCase))
+        {
+            var text = await http.GetStringAsync(zipUrl + ".sha256");
+            return text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
+        }
+
+        var fileName = zipUrl[(zipUrl.LastIndexOf('/') + 1)..];
+        var listUrl  = zipUrl[..(zipUrl.LastIndexOf('/') + 1)] + "checksums.sha256";
+        foreach (var line in (await http.GetStringAsync(listUrl)).Split('\n'))
+        {
+            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 && parts[^1].TrimStart('*') == fileName) return parts[0];
+        }
+        throw new InvalidDataException("No published checksum found for the FFmpeg download.");
+    }
 }

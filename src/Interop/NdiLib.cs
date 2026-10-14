@@ -48,7 +48,16 @@ internal static class NdiLib
     {
         const string DllFile = "Processing.NDI.Lib.x64.dll";
 
-        // 1. Registry (NDI Runtime installer writes this)
+        // 1. NDI_RUNTIME_DIR_V6/V5/V4 — the officially documented way to find the runtime
+        foreach (var ver in new[] { "V6", "V5", "V4" })
+        {
+            var dir = Environment.GetEnvironmentVariable($"NDI_RUNTIME_DIR_{ver}");
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            var p = Path.Combine(dir, DllFile);
+            if (File.Exists(p)) return p;
+        }
+
+        // 2. Registry
         foreach (var ver in new[] { "v6", "v5", "v4" })
         {
             try
@@ -66,7 +75,7 @@ internal static class NdiLib
             catch { }
         }
 
-        // 2. Well-known install paths
+        // 3. Well-known install paths
         var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         foreach (var candidate in new[]
         {
@@ -79,7 +88,6 @@ internal static class NdiLib
             if (File.Exists(candidate)) return candidate;
         }
 
-        // 3. Already on PATH (LoadLibrary will find it)
         return null;
     }
 
@@ -90,8 +98,8 @@ internal static class NdiLib
 
     public const int FrameFormat_Progressive = 1;
 
-    /// <summary>Timecode sentinel: synthesise from video clock.</summary>
-    public const long Timecode_SynthesizeFromVideo = unchecked((long)0x8000000000000000L);
+    /// <summary>NDIlib_send_timecode_synthesize (INT64_MAX): let the SDK generate the timecode.</summary>
+    public const long Timecode_Synthesize = long.MaxValue;
 
     // ── Structs ───────────────────────────────────────────────────────────────
 
@@ -117,8 +125,7 @@ internal static class NdiLib
         public int   FrameFormatType;
         public long  Timecode;              // int64_t — .NET Sequential aligns to 8
         public IntPtr Data;                 // uint8_t*
-        public int   LineStrideInBytes;
-        private int  _pad;                  // matches union padding before p_metadata
+        public int   LineStrideInBytes;     // (union with data_size_in_bytes; Sequential pads to 8 after it)
         public IntPtr Metadata;             // const char*  (NULL)
         public long  Timestamp;             // int64_t      (0 = use SDK clock)
     }
@@ -132,7 +139,6 @@ internal static class NdiLib
         public int   NoSamples;
         public long  Timecode;              // int64_t — .NET Sequential aligns to 8
         public IntPtr Data;                 // float* (interleaved)
-        public long  Timestamp;             // NDI 6.x extension (0 = SDK clock)
     }
 
     // ── P/Invoke ──────────────────────────────────────────────────────────────
@@ -141,10 +147,6 @@ internal static class NdiLib
                CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool NDIlib_initialize();
-
-    [DllImport(DllName, EntryPoint = "NDIlib_destroy",
-               CallingConvention = CallingConvention.Cdecl)]
-    public static extern void NDIlib_destroy();
 
     [DllImport(DllName, EntryPoint = "NDIlib_send_create",
                CallingConvention = CallingConvention.Cdecl)]

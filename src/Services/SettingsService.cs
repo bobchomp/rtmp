@@ -37,6 +37,16 @@ public class SettingsService
         }
         catch
         {
+            // Keep the unreadable file instead of letting the next Save() overwrite it —
+            // it may still hold stream keys the user can recover by hand
+            try
+            {
+                if (File.Exists(SettingsFile))
+                    File.Copy(SettingsFile,
+                        Path.Combine(SettingsDir, $"settings.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}.json"),
+                        overwrite: true);
+            }
+            catch { }
             Settings = new AppSettings();
         }
     }
@@ -66,7 +76,10 @@ public class SettingsService
         {
             Directory.CreateDirectory(SettingsDir);
             var json = JsonSerializer.Serialize(Settings, JsonOptions);
-            File.WriteAllText(SettingsFile, json);
+            // Write-then-rename so a crash mid-save can't leave a half-written file
+            var tmp = SettingsFile + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, SettingsFile, overwrite: true);
         }
         catch { /* non-fatal */ }
     }

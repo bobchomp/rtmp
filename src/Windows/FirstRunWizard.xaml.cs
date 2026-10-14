@@ -13,6 +13,9 @@ public partial class FirstRunWizard : Window
     // Validated port from page 1
     private int _rtmpPort = 1935;
 
+    // Created up front so the URL previewed on page 2 is the one that actually gets saved
+    private readonly StreamKey _pendingKey = new();
+
     /// <summary>True when the user completed the wizard (clicked Finish).</summary>
     public bool WasCompleted { get; private set; }
 
@@ -39,10 +42,7 @@ public partial class FirstRunWizard : Window
 
     private void UpdateRtmpUrlLabel()
     {
-        // Generate a preview URL using a placeholder key
-        var previewKey = _settingsService.Settings.StreamKeys.FirstOrDefault()?.Key
-                         ?? Guid.NewGuid().ToString("N");
-        RtmpUrlLabel.Text = $"rtmp://{_localIp}:{_rtmpPort}/live/{previewKey}";
+        RtmpUrlLabel.Text = $"rtmp://{_localIp}:{_rtmpPort}/live/{_pendingKey.Key}";
     }
 
     private void BackBtn_Click(object sender, RoutedEventArgs e)
@@ -77,8 +77,8 @@ public partial class FirstRunWizard : Window
             if (string.IsNullOrEmpty(name))
                 name = "My Stream";
 
-            var key = new StreamKey { Name = name };
-            _settingsService.Settings.StreamKeys.Add(key);
+            _pendingKey.Name = name;
+            _settingsService.Settings.StreamKeys.Add(_pendingKey);
             _settingsService.Settings.FirstRunCompleted = true;
             _settingsService.Save();
 

@@ -51,7 +51,7 @@ public class MediaMtxService : IAsyncDisposable
         {
             // Resolve the latest release URL dynamically via the GitHub API
             progress?.Report("Looking up latest MediaMTX release...");
-            var downloadUrl = await ResolveDownloadUrlAsync();
+            var (downloadUrl, sha256) = await ResolveDownloadUrlAsync();
             progress?.Report($"Downloading MediaMTX from GitHub...");
 
             var zipPath = Path.Combine(AppDir, "mediamtx.zip");
@@ -63,14 +63,20 @@ public class MediaMtxService : IAsyncDisposable
             await using (var fs = File.Create(zipPath))
                 await response.Content.CopyToAsync(fs);
 
-            progress?.Report("Extracting MediaMTX...");
-            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, AppDir, overwriteFiles: true);
-            File.Delete(zipPath);
+            try
+            {
+                if (sha256 != null)
+                    await DownloadVerifier.VerifySha256Async(zipPath, sha256);
+                else
+                    LogMessage?.Invoke("[mtx] Release has no published checksum — continuing without verification.");
 
-            if (!File.Exists(MtxExePath))
-                throw new FileNotFoundException(
-                    $"mediamtx.exe not found after extraction. " +
-                    $"Check {AppDir} — the zip may use a different folder layout.");
+                progress?.Report("Extracting MediaMTX...");
+                DownloadVerifier.ExtractEntry(zipPath, MtxExeName, Path.Combine(AppDir, MtxExeName));
+            }
+            finally
+            {
+                File.Delete(zipPath);
+            }
 
             progress?.Report("MediaMTX ready.");
             return true;
@@ -84,7 +90,8 @@ public class MediaMtxService : IAsyncDisposable
         }
     }
 
-    private async Task<string> ResolveDownloadUrlAsync()
+    /// Download URL of the Windows zip plus its SHA-256 from GitHub's "digest" field (null if absent).
+    private async Task<(string Url, string? Sha256)> ResolveDownloadUrlAsync()
     {
         var json = await _http.GetStringAsync(MtxApiUrl);
         using var doc = JsonDocument.Parse(json);
@@ -99,8 +106,10 @@ public class MediaMtxService : IAsyncDisposable
             if (name.Contains("windows_amd64", StringComparison.OrdinalIgnoreCase)
                 && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                return asset.GetProperty("browser_download_url").GetString()
+                var url = asset.GetProperty("browser_download_url").GetString()
                     ?? throw new InvalidOperationException("Asset has no download URL.");
+                var digest = asset.TryGetProperty("digest", out var d) ? d.GetString() ?? "" : "";
+                return (url, digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest[7..] : null);
             }
         }
 
@@ -109,30 +118,35 @@ public class MediaMtxService : IAsyncDisposable
             "Check https://github.com/bluenviron/mediamtx/releases/latest manually.");
     }
 
-    public void WriteConfig(AppSettings settings)
-    {
-        Directory.CreateDirectory(AppDir);
-        if (!string.IsNullOrWhiteSpace(settings.RecordingPath))
-            Directory.CreateDirectory(settings.RecordingPath);
+    // Config last written, and the ports the running process was started with —
+    // lets ApplyConfigAsync hot-reload path changes instead of restarting.
+    private string? _lastConfig;
+    private int _runningRtmpPort;
+    private int _runningApiPort;
+    private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
 
+    private static string BuildConfig(AppSettings settings)
+    {
         var pathsYaml = BuildPathsYaml(settings);
 
-        var config = $"""
+        // API is bound to localhost only — nothing else on the network needs it
+        return $"""
             ###############################################
             # RTMPProjector - MediaMTX configuration
             ###############################################
 
             logLevel: warn
             logDestinations: [file, stdout]
-            logFile: {EscapeYaml(MtxLogPath)}
+            logFile: {Quote(MtxLogPath.Replace('\\', '/'))}
 
             api: yes
-            apiAddress: :{settings.ApiPort}
+            apiAddress: 127.0.0.1:{settings.ApiPort}
 
             rtmp: yes
             rtmpAddress: :{settings.RtmpPort}
             rtmpEncryption: "no"
 
+            rtsp: no
             hls: no
             webrtc: no
             srt: no
@@ -140,17 +154,34 @@ public class MediaMtxService : IAsyncDisposable
             paths:
             {pathsYaml}
             """;
+    }
 
-        File.WriteAllText(MtxConfigPath, config);
+    private void WriteConfig(AppSettings settings, string config)
+    {
+        Directory.CreateDirectory(AppDir);
+        if (!string.IsNullOrWhiteSpace(settings.RecordingPath))
+            Directory.CreateDirectory(settings.RecordingPath);
+
+        // Write-then-rename so MediaMTX's file watcher never reads a half-written file
+        var tmp = MtxConfigPath + ".tmp";
+        File.WriteAllText(tmp, config);
+        File.Move(tmp, MtxConfigPath, overwrite: true);
+        _lastConfig = config;
     }
 
     private static string BuildPathsYaml(AppSettings settings)
     {
         var lines = new System.Text.StringBuilder();
+        var seen  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var key in settings.StreamKeys)
         {
-            lines.AppendLine($"  {key.RtmpPath}:");
+            // Duplicate path names make MediaMTX reject the whole config
+            if (string.IsNullOrWhiteSpace(key.Key) || !seen.Add(key.RtmpPath)) continue;
+
+            // Every value is single-quoted so stray characters (#, :, quotes) in a
+            // key or folder name can't break or inject into the YAML
+            lines.AppendLine($"  {Quote(key.RtmpPath)}:");
 
             if (key.RecordEnabled && !string.IsNullOrWhiteSpace(settings.RecordingPath))
             {
@@ -158,33 +189,35 @@ public class MediaMtxService : IAsyncDisposable
                 var recPath = Path.Combine(settings.RecordingPath, "%path", "%Y-%m-%d_%H-%M-%S-%f")
                                   .Replace('\\', '/');
                 lines.AppendLine($"    record: yes");
-                lines.AppendLine($"    recordPath: {recPath}");
+                lines.AppendLine($"    recordPath: {Quote(recPath)}");
                 lines.AppendLine($"    recordFormat: fmp4");
             }
         }
 
-        // Catch-all: accept any publisher path that wasn't explicitly listed above.
-        // This means DJI / third-party encoders that append the stream key differently
-        // will still connect and be detected. The path appears in the diagnostics log.
+        // Catch-all: accept any publisher path that wasn't explicitly listed above, so
+        // DJI / third-party encoders that format the path differently still connect.
+        // Such streams are logged but never auto-projected (see App.OnStreamBecameActive).
         lines.AppendLine("  ~^.*$:");
 
         return lines.ToString().TrimEnd();
     }
 
-    public async Task StartAsync()
+    public async Task StartAsync(AppSettings settings)
+    {
+        await _lifecycleLock.WaitAsync();
+        try { await StartCoreAsync(settings); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task StartCoreAsync(AppSettings settings)
     {
         if (IsRunning) return;
 
         if (!File.Exists(MtxExePath))
             throw new FileNotFoundException("MediaMTX binary not found. Run EnsureBinaryAsync first.");
 
-        // Kill any orphaned mediamtx.exe left from a previous app session so the new
-        // process can bind its ports cleanly.
-        foreach (var stale in Process.GetProcessesByName("mediamtx"))
-        {
-            try { stale.Kill(entireProcessTree: true); stale.WaitForExit(2000); } catch { }
-            stale.Dispose();
-        }
+        WriteConfig(settings, BuildConfig(settings));
+        KillOrphanedInstances();
 
         var psi = new ProcessStartInfo
         {
@@ -197,40 +230,116 @@ public class MediaMtxService : IAsyncDisposable
             RedirectStandardError = true
         };
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
-        _process.ErrorDataReceived  += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
-        _process.Exited += (_, _) => LogMessage?.Invoke("MediaMTX process exited.");
+        var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
+        proc.ErrorDataReceived  += (_, e) => { if (e.Data != null) LogMessage?.Invoke($"[mtx] {e.Data}"); };
+        proc.Exited += (_, _) => LogMessage?.Invoke("MediaMTX process exited.");
 
-        _process.Start();
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
+        try
+        {
+            proc.Start();
+        }
+        catch
+        {
+            proc.Dispose();
+            throw;
+        }
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+        _process = proc;
+        _runningRtmpPort = settings.RtmpPort;
+        _runningApiPort  = settings.ApiPort;
 
-        // Give it a moment to bind the port
+        // Give it a moment to bind the port, then make sure it didn't immediately die
+        // (bad config, port already in use, ...) — the reason is in the [mtx] log lines
         await Task.Delay(1000);
+        if (proc.HasExited)
+        {
+            _process = null;
+            proc.Dispose();
+            throw new InvalidOperationException(
+                "MediaMTX exited straight after starting — see the Server tab log (is the port already in use?).");
+        }
+    }
+
+    // Only kill mediamtx.exe copies that are ours (left over from a crash) — never
+    // another application's MediaMTX server.
+    private void KillOrphanedInstances()
+    {
+        var ours = new[] { Path.Combine(AppContext.BaseDirectory, MtxExeName), Path.Combine(AppDir, MtxExeName) };
+        foreach (var stale in Process.GetProcessesByName("mediamtx"))
+        {
+            try
+            {
+                var exe = stale.MainModule?.FileName;
+                if (exe != null && ours.Any(o => string.Equals(Path.GetFullPath(o), exe, StringComparison.OrdinalIgnoreCase)))
+                {
+                    stale.Kill(entireProcessTree: true);
+                    stale.WaitForExit(2000);
+                    LogMessage?.Invoke("Stopped a leftover MediaMTX process from a previous session.");
+                }
+            }
+            catch { /* can't inspect it (other user / elevated) — not ours to kill */ }
+            finally { stale.Dispose(); }
+        }
     }
 
     public async Task StopAsync()
     {
-        if (_process is { HasExited: false })
+        await _lifecycleLock.WaitAsync();
+        try { await StopCoreAsync(); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task StopCoreAsync()
+    {
+        var proc = _process;
+        _process = null;
+        _lastConfig = null;
+        if (proc == null) return;
+
+        if (!proc.HasExited)
         {
-            try { _process.Kill(entireProcessTree: true); }
+            try { proc.Kill(entireProcessTree: true); }
             catch { /* already gone */ }
 
-            await _process.WaitForExitAsync();
+            await proc.WaitForExitAsync();
         }
-        _process?.Dispose();
-        _process = null;
+        proc.Dispose();
     }
 
-    public async Task RestartAsync(AppSettings settings)
+    /// <summary>
+    /// Applies settings to the running server. Path changes (keys added/removed,
+    /// recording toggled) are written to the config file, which MediaMTX hot-reloads
+    /// without dropping other streams. Only a port change needs a full restart.
+    /// Returns true if the server was restarted.
+    /// </summary>
+    public async Task<bool> ApplyConfigAsync(AppSettings settings)
     {
-        await StopAsync();
-        WriteConfig(settings);
-        await StartAsync();
+        await _lifecycleLock.WaitAsync();
+        try
+        {
+            if (!IsRunning) return false;
+
+            var config = BuildConfig(settings);
+            if (config == _lastConfig) return false;
+
+            if (settings.RtmpPort == _runningRtmpPort && settings.ApiPort == _runningApiPort)
+            {
+                WriteConfig(settings, config);
+                LogMessage?.Invoke("[mtx] Configuration updated (live reload — streams keep running).");
+                return false;
+            }
+
+            LogMessage?.Invoke("[mtx] Port changed — restarting the RTMP server.");
+            await StopCoreAsync();
+            await StartCoreAsync(settings);
+            return true;
+        }
+        finally { _lifecycleLock.Release(); }
     }
 
-    private static string EscapeYaml(string path) => path.Replace('\\', '/');
+    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
     public async ValueTask DisposeAsync()
     {

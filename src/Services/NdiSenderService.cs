@@ -1,6 +1,5 @@
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading;
 using LibVLCSharp.Shared;
 using RTMPProjector.Interop;
 
@@ -78,7 +77,6 @@ public sealed class NdiSenderService : IDisposable
 
     private IntPtr _ndiSender = IntPtr.Zero;
 
-    private byte[]?  _ndiNameBytes;
     private GCHandle _ndiNamePin;
 
     private byte[]?  _frameBuffer;
@@ -125,14 +123,15 @@ public sealed class NdiSenderService : IDisposable
         try
         {
             // Create the NDI sender
-            _ndiNameBytes = System.Text.Encoding.UTF8.GetBytes(ndiName + '\0');
-            _ndiNamePin   = GCHandle.Alloc(_ndiNameBytes, GCHandleType.Pinned);
+            _ndiNamePin = GCHandle.Alloc(System.Text.Encoding.UTF8.GetBytes(ndiName + '\0'), GCHandleType.Pinned);
 
             var create = new NdiLib.SendCreate
             {
                 NdiName    = _ndiNamePin.AddrOfPinnedObject(),
                 Groups     = IntPtr.Zero,
-                ClockVideo = true,
+                // VLC already delivers frames in real time — letting NDI also pace them
+                // would block VLC's display thread and throttle 50/60 fps sources
+                ClockVideo = false,
                 ClockAudio = false,
             };
             _ndiSender = NdiLib.NDIlib_send_create(ref create);
@@ -235,7 +234,7 @@ public sealed class NdiSenderService : IDisposable
             FrameRateD         = 1001,
             PictureAspectRatio = _frameHeight > 0 ? (float)_frameWidth / _frameHeight : 16f / 9f,
             FrameFormatType    = NdiLib.FrameFormat_Progressive,
-            Timecode           = NdiLib.Timecode_SynthesizeFromVideo,
+            Timecode           = NdiLib.Timecode_Synthesize,
             Data               = picture,
             LineStrideInBytes  = _frameWidth * 4,
             Metadata           = IntPtr.Zero,
@@ -282,9 +281,8 @@ public sealed class NdiSenderService : IDisposable
             SampleRate = 48000,
             NoChannels = 2,
             NoSamples  = (int)count,
-            Timecode   = NdiLib.Timecode_SynthesizeFromVideo,
+            Timecode   = NdiLib.Timecode_Synthesize,
             Data       = samples,
-            Timestamp  = 0,
         };
 
         NdiLib.NDIlib_util_send_send_audio_interleaved_32f(_ndiSender, ref frame);
@@ -326,7 +324,6 @@ public sealed class NdiSenderService : IDisposable
         FreeFramePin();
 
         if (_ndiNamePin.IsAllocated) _ndiNamePin.Free();
-        _ndiNameBytes = null;
     }
 
     private void FreeFramePin()

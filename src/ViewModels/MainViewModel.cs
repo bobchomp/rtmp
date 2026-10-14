@@ -31,7 +31,12 @@ public class MainViewModel : INotifyPropertyChanged
     public bool IsServerRunning
     {
         get => _isServerRunning;
-        private set { _isServerRunning = value; OnPropertyChanged(); OnPropertyChanged(nameof(ServerStatusText)); OnPropertyChanged(nameof(ServerStatusColor)); }
+        private set
+        {
+            _isServerRunning = value;
+            OnPropertyChanged(); OnPropertyChanged(nameof(ServerStatusText)); OnPropertyChanged(nameof(ServerStatusColor));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();   // Go Live etc. depend on this
+        }
     }
 
     public string ServerStatusText => IsServerRunning ? "Running" : "Stopped";
@@ -184,9 +189,6 @@ public class MainViewModel : INotifyPropertyChanged
     // Feature 10: Toggle theme
     public RelayCommand ToggleThemeCommand { get; }
 
-    // Feature: Toggle recording for a stream key
-    public RelayCommand ToggleRecordingCommand { get; }
-
     // Go Live / End Live for a stream key
     public RelayCommand ToggleGoLiveCommand { get; }
 
@@ -226,7 +228,14 @@ public class MainViewModel : INotifyPropertyChanged
         OpenProjectionCommand = new RelayCommand(
             o =>
             {
-                var key = o as StreamKey ?? SelectedStreamKey ?? new StreamKey { Name = "Preview" };
+                // Display tab button has no parameter: use the selected key, else a live one, else the first
+                var key = o as StreamKey ?? SelectedStreamKey
+                          ?? StreamKeys.FirstOrDefault(k => k.IsActive) ?? StreamKeys.FirstOrDefault();
+                if (key == null)
+                {
+                    StatusMessage = "Add a stream key first.";
+                    return;
+                }
                 OpenProjectionRequested?.Invoke(key);
             });
 
@@ -251,24 +260,6 @@ public class MainViewModel : INotifyPropertyChanged
             _settingsService.Save();
             OnPropertyChanged(nameof(Settings));
         });
-
-        // Feature: Toggle recording for a stream key
-        ToggleRecordingCommand = new RelayCommand(
-            o =>
-            {
-                var key = o as StreamKey;
-                if (key == null) return;
-                key.RecordEnabled = !key.RecordEnabled;
-                SaveSettings();
-                StatusMessage = key.RecordEnabled
-                    ? $"Recording enabled for {key.Name}."
-                    : $"Recording disabled for {key.Name}.";
-            },
-            o =>
-            {
-                var key = o as StreamKey;
-                return key != null && IsServerRunning && !string.IsNullOrEmpty(Settings.RecordingPath);
-            });
 
         ToggleGoLiveCommand = new RelayCommand(
             o =>
@@ -299,6 +290,10 @@ public class MainViewModel : INotifyPropertyChanged
             // StreamKey.IsActive was already set in the monitor — INPC fires automatically
             StatusMessage = $"Stream connected: {key.RtmpPath}";
             AppendLog($"Stream STARTED — path: {key.RtmpPath}  name: {key.Name}");
+            if (key.ExplicitPath != null)
+                AppendLog($"⚠ Stream on unrecognised path '{key.RtmpPath}' — it doesn't match any configured stream key, " +
+                          "so it won't be projected automatically. Check the URL on the sending device, " +
+                          "or open it manually if you expected it.");
 
             if (key.NdiEnabled)
                 StartNdiSender(key);
@@ -329,6 +324,10 @@ public class MainViewModel : INotifyPropertyChanged
 
         RefreshMonitors();
         SyncStreamKeys();
+
+        var portsOk = ValidatePorts(Settings.RtmpPort, Settings.ApiPort) == null;
+        _validRtmpPort = portsOk ? Settings.RtmpPort : 1935;
+        _validApiPort  = portsOk ? Settings.ApiPort  : 9997;
     }
 
     // ── Initialization ────────────────────────────────────────────────────────
@@ -343,16 +342,57 @@ public class MainViewModel : INotifyPropertyChanged
             idx++;
         }
 
-        var target = Monitors.FirstOrDefault(m => m.Index == Settings.ProjectionMonitorIndex)
-                     ?? Monitors.FirstOrDefault();
-        SelectedMonitor = target;
+        // Set the field directly: if the saved monitor is unplugged right now we fall back
+        // for display, but must not overwrite the user's saved choice
+        _selectedMonitor = Monitors.FirstOrDefault(m => m.Index == Settings.ProjectionMonitorIndex)
+                           ?? Monitors.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedMonitor));
     }
 
     public void SyncStreamKeys()
     {
+        foreach (var key in StreamKeys) key.PropertyChanged -= OnStreamKeyPropertyChanged;
         StreamKeys.Clear();
         foreach (var key in Settings.StreamKeys)
+        {
+            key.PropertyChanged += OnStreamKeyPropertyChanged;
             StreamKeys.Add(key);
+        }
+    }
+
+    // Ticking "Record this stream" applies straight away (MediaMTX hot-reloads the path)
+    private void OnStreamKeyPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Go Live button state depends on these, which change outside of user input
+        if (e.PropertyName is nameof(StreamKey.IsLive) or nameof(StreamKey.IsActive))
+            UIInvoke(System.Windows.Input.CommandManager.InvalidateRequerySuggested);
+
+        if (e.PropertyName != nameof(StreamKey.RecordEnabled) || sender is not StreamKey key) return;
+        _settingsService.Save();
+        _ = ApplyServerConfigAsync();
+        StatusMessage = key.RecordEnabled
+            ? $"Recording enabled for {key.Name}."
+            : $"Recording disabled for {key.Name}.";
+    }
+
+    /// Pushes settings to the running server: hot-reloads path changes, and only
+    /// restarts (dropping streams) when a port changed.
+    private async Task ApplyServerConfigAsync()
+    {
+        if (!IsServerRunning) return;
+        try
+        {
+            if (await _mediaMtx.ApplyConfigAsync(Settings))
+                _monitor.Start(Settings);   // ports changed — poll the new API port
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Applying server settings failed: {ex.Message}");
+            StatusMessage = "Server failed to restart — see the Server tab log.";
+            _restream.EndAll();
+            _monitor.Stop();
+            IsServerRunning = false;
+        }
     }
 
     // ── Server control ────────────────────────────────────────────────────────
@@ -384,8 +424,7 @@ public class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
-            _mediaMtx.WriteConfig(Settings);
-            await _mediaMtx.StartAsync();
+            await _mediaMtx.StartAsync(Settings);
             _monitor.Start(Settings);
 
             IsServerRunning = true;
@@ -461,22 +500,25 @@ public class MainViewModel : INotifyPropertyChanged
     private void AddStreamKey()
     {
         var key = new StreamKey { Name = $"Stream {StreamKeys.Count + 1}" };
+        key.PropertyChanged += OnStreamKeyPropertyChanged;
         StreamKeys.Add(key);
         Settings.StreamKeys.Add(key);
         SelectedStreamKey = key;
         _settingsService.Save();
-        if (IsServerRunning) _ = _mediaMtx.RestartAsync(Settings);
+        _ = ApplyServerConfigAsync();
     }
 
     private void RemoveStreamKey(StreamKey? key)
     {
         if (key == null) return;
         _restream.EndLive(key);
+        StopNdiSender(key.Id);
+        key.PropertyChanged -= OnStreamKeyPropertyChanged;
         StreamKeys.Remove(key);
         Settings.StreamKeys.Remove(key);
         if (SelectedStreamKey == key) SelectedStreamKey = StreamKeys.FirstOrDefault();
         _settingsService.Save();
-        if (IsServerRunning) _ = _mediaMtx.RestartAsync(Settings);
+        _ = ApplyServerConfigAsync();
     }
 
     private void CopyRtmpUrl(StreamKey? key)
@@ -501,18 +543,31 @@ public class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(Settings));
             _settingsService.Save();
             RefreshDiskSpace(); // Feature 6: refresh after path change
+            _ = ApplyServerConfigAsync();
         }
     }
 
     // ── Settings save ─────────────────────────────────────────────────────────
 
+    // Last ports that passed validation — restored if the user types something invalid
+    private int _validRtmpPort;
+    private int _validApiPort;
+
     private void SaveSettings()
     {
-        // Sync editable fields from StreamKeys back to Settings
-        Settings.StreamKeys.Clear();
-        foreach (var k in StreamKeys)
-            Settings.StreamKeys.Add(k);
+        var portError = ValidatePorts(Settings.RtmpPort, Settings.ApiPort);
+        if (portError != null)
+        {
+            Settings.RtmpPort = _validRtmpPort;
+            Settings.ApiPort  = _validApiPort;
+            OnPropertyChanged(nameof(Settings));
+            StatusMessage = $"Not saved: {portError}";
+            return;
+        }
+        _validRtmpPort = Settings.RtmpPort;
+        _validApiPort  = Settings.ApiPort;
 
+        // StreamKeys and Settings.StreamKeys hold the same objects, so edits are already in place
         _settingsService.Save();
         StatusMessage = "Settings saved.";
         RefreshDiskSpace();
@@ -520,11 +575,15 @@ public class MainViewModel : INotifyPropertyChanged
         // Feature: Sync Windows auto-start registry entry
         SetWindowsAutoStart(Settings.AutoStartWithWindows);
 
-        // Feature: Sync Windows auto-start registry entry
-        SetWindowsAutoStart(Settings.AutoStartWithWindows);
+        _ = ApplyServerConfigAsync();
+    }
 
-        if (IsServerRunning)
-            _ = _mediaMtx.RestartAsync(Settings);
+    private static string? ValidatePorts(int rtmp, int api)
+    {
+        if (rtmp is < 1 or > 65535) return "RTMP port must be between 1 and 65535.";
+        if (api  is < 1 or > 65535) return "API port must be between 1 and 65535.";
+        if (rtmp == api)             return "RTMP port and API port must be different.";
+        return null;
     }
 
     // Feature: Windows auto-start via registry

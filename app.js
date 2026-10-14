@@ -23,10 +23,6 @@
       const heroVer = document.getElementById('hero-version');
       if (heroVer) heroVer.textContent = tag ? `Latest release: ${tag}` : '';
 
-      // Update hero download button href
-      const heroBtn = document.getElementById('hero-download-btn');
-      if (heroBtn) heroBtn.href = '#download';
-
       // Update main download button
       const dlBtn = document.getElementById('download-btn');
       if (dlBtn) dlBtn.href = url;

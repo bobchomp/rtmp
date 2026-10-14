@@ -29,7 +29,7 @@
             <Grid.Triggers>
                 <!-- Fade-in on load / mouse activity -->
                 <EventTrigger RoutedEvent="Grid.Loaded">
-                    <BeginStoryboard x:Name="FadeInSB">
+                    <BeginStoryboard>
                         <Storyboard>
                             <DoubleAnimation Storyboard.TargetName="Hud"
                                              Storyboard.TargetProperty="Opacity"
@@ -50,7 +50,7 @@
                 </Border>
 
                 <!-- Buttons -->
-                <Button x:Name="StopBtn" Margin="12,0,0,0" Padding="12,6"
+                <Button Margin="12,0,0,0" Padding="12,6"
                         Background="#AA1a1d27" Foreground="White" BorderThickness="0"
                         Cursor="Arrow" Click="StopBtn_Click"
                         Content="■  Stop Projection"
@@ -72,7 +72,7 @@
             </StackPanel>
 
             <!-- Feature 9: Keyboard hint updated with M — mute -->
-            <TextBlock x:Name="KeyboardHintLabel"
+            <TextBlock
                        Text="ESC — close   ·   F — fullscreen   ·   M — mute   ·   Tab / 1–9 — switch stream"
                        Foreground="#99FFFFFF" FontSize="11"
                        HorizontalAlignment="Right" VerticalAlignment="Top"

@@ -4,13 +4,15 @@ A Windows desktop application that runs its own RTMP server and projects incomin
 
 ## Features
 
-- **RTMP server** on port 1935 (powered by [MediaMTX](https://github.com/bluenviron/mediamtx), auto-downloaded on first launch)
-- **Stream key authentication** — only configured keys are accepted
-- **Fullscreen projection** onto any monitor you choose, with auto-detect when a stream connects
-- **Stream recording** to a local folder (per key, optional)
-- **Go Live** — push any drone stream to YouTube, Facebook, Twitch or a custom RTMP(S) server with one button (FFmpeg is bundled)
+- **RTMP server** on port 1935 (powered by [MediaMTX](https://github.com/bluenviron/mediamtx), bundled with the installer)
+- **Stream keys** — each drone/encoder gets its own key. Only streams on a configured key are projected automatically; streams on any other path still connect (so oddly-formatted DJI URLs can be diagnosed) but are just logged with a warning
+- **Fullscreen projection** onto the monitor you choose, opening automatically when a stream connects and resuming by itself after drop-outs
+- **Stream recording** to a local folder (per key, optional, fragmented MP4)
+- **Go Live** — push any drone stream to YouTube, Facebook, Twitch or a custom RTMP(S) server with one button (FFmpeg is bundled). The platform stream key is stored encrypted (Windows DPAPI)
+- **NDI output** — send any stream to the local network as an NDI source (the installer offers to install the free NDI Runtime)
+- **Auto-update** — checks GitHub releases hourly; downloads are verified against GitHub's SHA-256 before installing
 - **System tray** — runs quietly in the background, double-click to open the control panel
-- Dark-themed control panel UI
+- Dark and light themes
 
 ---
 
@@ -41,18 +43,18 @@ publish\RTMPProjector.exe
 
 Or open **RTMPProjector.sln** in Visual Studio 2022 and press F5.
 
-### Icon (optional)
+### Icon
 
-Place a `tray.ico` file at `src/Assets/tray.ico` before building to customise the system-tray icon. Without it the app runs fine but shows a default icon.
+The tray/app icon is `src/Assets/tray.ico` — replace it to customise.
 
 ---
 
 ## First Run
 
-1. Launch **RTMPProjector.exe** — it appears in the system tray.
-2. Double-click the tray icon to open the **Control Panel**.
-3. Go to **Stream Keys → + Add Key** and create a key with a friendly name.
-4. Click **Start Server** — MediaMTX is downloaded automatically (~10 MB) if not already present.
+1. Launch **RTMPProjector.exe** — a short setup wizard picks the RTMP port and creates your first stream key.
+2. The **Control Panel** opens (closing it asks whether to minimise to the tray or quit).
+3. Add more keys any time under **Stream Keys → + Add Key**.
+4. Click **Start Server**.
 5. Give the publisher the RTMP URL shown on the key detail panel:
 
    ```
@@ -98,7 +100,8 @@ Place a `tray.ico` file at `src/Assets/tray.ico` before building to customise th
 ```
 
 - **MediaMTX** handles all RTMP protocol details, stream key enforcement and recording.
-- **StreamMonitorService** polls `http://localhost:9997/v3/paths/list` every 2 seconds to detect live streams.
+- **StreamMonitorService** polls `http://127.0.0.1:9997/v3/paths/list` every 2 seconds to detect live streams. The API only listens on localhost.
+- Saving settings rewrites the MediaMTX config, which MediaMTX hot-reloads — streams keep running. Only changing a port restarts the server.
 - **LibVLCSharp** opens `rtmp://localhost:1935/live/<key>` and renders it fullscreen using VLC's engine.
 - **RestreamService** (Go Live) runs `ffmpeg -i rtmp://localhost:1935/live/<key> -c copy -f flv <server>/<stream-key>` per stream key. No re-encoding; if the drone sends no audio a silent AAC track is added, because YouTube and Facebook expect one. While live, FFmpeg restarts automatically after drone drop-outs and network blips.
 
@@ -108,15 +111,20 @@ Place a `tray.ico` file at `src/Assets/tray.ico` before building to customise th
 
 Settings are stored at `%AppData%\RTMPProjector\settings.json`.
 
+Everything is editable in the app; the file is only listed here for reference. If it ever becomes unreadable it is kept as `settings.corrupt-<date>.json` rather than overwritten.
+
 | Setting | Default | Description |
 |---|---|---|
-| `rtmpPort` | 1935 | Port the RTMP server listens on |
-| `apiPort` | 9997 | Internal MediaMTX API port |
-| `projectionMonitorIndex` | 1 | 0-based monitor index |
-| `autoProjectOnConnect` | true | Open projection window automatically |
-| `recordingPath` | `%AppData%\RTMPProjector\Recordings` | Root folder for recordings |
-| `startMinimized` | true | Start in tray |
-| `autoStartServer` | false | Start the RTMP server immediately on launch |
+| `RtmpPort` | 1935 | Port the RTMP server listens on |
+| `ApiPort` | 9997 | Internal MediaMTX API port (localhost only) |
+| `StreamKeys` | — | Stream keys, with per-key recording, Go Live and NDI options |
+| `ProjectionMonitorIndex` | 1 | 0-based monitor index for projection (falls back to the first monitor if missing) |
+| `AutoProjectOnConnect` | true | Open the projection window automatically |
+| `RecordingPath` | `%AppData%\RTMPProjector\Recordings` | Root folder for recordings |
+| `StartMinimized` | false | Start in the tray without showing the window |
+| `AutoStartServer` | false | Start the RTMP server on launch |
+| `AutoStartWithWindows` | false | Launch when Windows starts |
+| `Theme` | `Dark` | `Dark` or `Light` |
 
 ---
 
@@ -126,7 +134,9 @@ Settings are stored at `%AppData%\RTMPProjector\settings.json`.
 |---|---|
 | `ESC` | Close projection window |
 | `F` | Toggle borderless fullscreen ↔ windowed |
-| Mouse move | Show HUD for 3 seconds |
+| `M` | Mute / unmute |
+| `Tab` | Cycle to the next live stream |
+| `1`–`9` | Jump to the Nth live stream |
 
 ---
 

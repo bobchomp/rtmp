@@ -27,8 +27,8 @@
     <!-- System tray icon support -->
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
 
-    <!-- JSON settings -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- DPAPI encryption of the Go Live stream key in settings.json -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
