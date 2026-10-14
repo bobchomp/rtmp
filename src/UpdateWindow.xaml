@@ -41,7 +41,7 @@
                            VerticalAlignment="Center" Margin="12,0"/>
                 <Border Style="{StaticResource Chip}" Background="{StaticResource Accent}">
                     <TextBlock x:Name="ChipNew" Style="{StaticResource ChipText}"
-                               Foreground="White"/>
+                               Foreground="{StaticResource TextPrim}"/>
                 </Border>
                 <TextBlock x:Name="SizeLabel" Foreground="{StaticResource TextMuted}"
                            FontSize="12" VerticalAlignment="Center" Margin="16,0,0,0"/>
@@ -72,7 +72,7 @@
 
             <ProgressBar x:Name="DownloadBar" Height="8" Minimum="0" Maximum="100"
                          Foreground="{DynamicResource Accent}"
-                         Background="#22253a"
+                         Background="{StaticResource BgInput}"
                          BorderThickness="0"
                          Margin="0,0,0,12">
                 <ProgressBar.Template>
@@ -111,15 +111,15 @@
             <Border Background="{StaticResource BgCard}" CornerRadius="6" Padding="16" Margin="0,0,0,24">
                 <StackPanel>
                     <TextBlock Foreground="{StaticResource TextPrim}" FontSize="13" Margin="0,0,0,8">
-                        <Run FontWeight="Bold" Foreground="{StaticResource Accent}">1. </Run>
+                        <Run FontWeight="Bold" Foreground="{StaticResource AccentText}">1. </Run>
                         <Run>Click "Run Installer" below — RTMP Projector will close.</Run>
                     </TextBlock>
                     <TextBlock Foreground="{StaticResource TextPrim}" FontSize="13" Margin="0,0,0,8">
-                        <Run FontWeight="Bold" Foreground="{StaticResource Accent}">2. </Run>
+                        <Run FontWeight="Bold" Foreground="{StaticResource AccentText}">2. </Run>
                         <Run>The installer shows a small progress window while it updates.</Run>
                     </TextBlock>
                     <TextBlock Foreground="{StaticResource TextPrim}" FontSize="13" Margin="0,0,0,8">
-                        <Run FontWeight="Bold" Foreground="{StaticResource Accent}">3. </Run>
+                        <Run FontWeight="Bold" Foreground="{StaticResource AccentText}">3. </Run>
                         <Run>RTMP Projector will restart automatically once updated.</Run>
                     </TextBlock>
                     <Separator Margin="0,8"/>

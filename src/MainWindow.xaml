@@ -57,7 +57,7 @@
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="RTMP" FontSize="20" FontWeight="Bold"
-                               Foreground="{DynamicResource Accent}"/>
+                               Foreground="{DynamicResource AccentText}"/>
                     <TextBlock Text=" Projector" FontSize="20" FontWeight="Bold"
                                Foreground="{DynamicResource TextPrim}"/>
                     <Border Background="{DynamicResource BgInput}" CornerRadius="4"
@@ -96,24 +96,6 @@
                     </Button>
                     <Button Style="{StaticResource GhostBtn}" Content="Minimise to Tray"
                             Margin="8,0,0,0" Click="MinimiseToTray_Click"/>
-                    <!-- Feature 10: Theme toggle button -->
-                    <Button Style="{StaticResource GhostBtn}" Margin="8,0,0,0"
-                            Command="{Binding ToggleThemeCommand}" Padding="8,8" FontSize="14">
-                        <Button.Content>
-                            <TextBlock>
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="☀"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Settings.Theme}" Value="Light">
-                                                <Setter Property="Text" Value="🌙"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Button.Content>
-                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -320,7 +302,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock FontFamily="Consolas" FontSize="13"
-                                                   Foreground="{DynamicResource Accent}"
+                                                   Foreground="{DynamicResource AccentText}"
                                                    VerticalAlignment="Center" TextWrapping="Wrap">
                                             <TextBlock.Text>
                                                 <MultiBinding StringFormat="rtmp://{0}:{1}/live/{2}">
@@ -405,6 +387,7 @@
                                                 <DataTrigger Binding="{Binding IsLive}" Value="True">
                                                     <Setter Property="Content" Value="■ End Live Stream"/>
                                                     <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -619,7 +602,7 @@
 
                                 <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="12" TextWrapping="Wrap">
                                     Publishers connect with:<LineBreak/>
-                                    <Run FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource Accent}"
+                                    <Run FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource AccentText}"
                                          Text="{Binding Settings.RtmpPort, Mode=OneWay, StringFormat='rtmp://&lt;your-ip&gt;:{0}/live/&lt;stream-key&gt;'}"/>
                                 </TextBlock>
                             </StackPanel>

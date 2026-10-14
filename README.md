@@ -12,7 +12,7 @@ A Windows desktop application that runs its own RTMP server and projects incomin
 - **NDI output** — send any stream to the local network as an NDI source (the installer offers to install the free NDI Runtime)
 - **Auto-update** — checks GitHub releases hourly; downloads are verified against GitHub's SHA-256 before installing
 - **System tray** — runs quietly in the background, double-click to open the control panel
-- Dark and light themes
+- Clean light interface
 
 ---
 
@@ -121,7 +121,6 @@ Everything is editable in the app; the file is only listed here for reference. I
 | `ProjectionMonitorIndex` | 1 | 0-based monitor index for projection (falls back to the first monitor if missing) |
 | `AutoProjectOnConnect` | true | Open the projection window automatically |
 | `RecordingPath` | `%AppData%\RTMPProjector\Recordings` | Root folder for recordings |
-| `Theme` | `Dark` | `Dark` or `Light` |
 
 ---
 

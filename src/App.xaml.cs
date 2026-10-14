@@ -83,9 +83,6 @@ public partial class App : Application
         _settingsService = new SettingsService();
         _settingsService.Load();
 
-        // Feature 10: Apply theme from settings
-        ApplyTheme(_settingsService.Settings.Theme);
-
         // Show changelog if we just auto-updated
         CheckAndShowWhatsNew();
 
@@ -127,24 +124,6 @@ public partial class App : Application
         BuildTrayIcon();
 
         _mainWindow.Show();
-    }
-
-    // Feature 10: Theme switching
-    public void ApplyTheme(string theme)
-    {
-        var themeFile = theme == "Light" ? "Themes/Light.xaml" : "Themes/Dark.xaml";
-        var uri = new Uri($"pack://application:,,,/{themeFile}", UriKind.Absolute);
-        var dict = new ResourceDictionary { Source = uri };
-
-        if (Resources.MergedDictionaries.Count > 0)
-            Resources.MergedDictionaries[0] = dict;
-        else
-            Resources.MergedDictionaries.Add(dict);
-
-        if (_settingsService != null)
-        {
-            _settingsService.Settings.Theme = theme;
-        }
     }
 
     private static void CheckAndShowWhatsNew()
