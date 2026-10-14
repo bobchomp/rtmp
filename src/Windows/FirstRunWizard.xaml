@@ -75,7 +75,7 @@
                     Padding="12,8" Margin="0,0,0,8">
                 <TextBlock x:Name="RtmpUrlLabel"
                            FontFamily="Consolas" FontSize="12"
-                           Foreground="{DynamicResource Accent}"
+                           Foreground="{DynamicResource AccentText}"
                            TextWrapping="Wrap"/>
             </Border>
 

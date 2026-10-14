@@ -17,7 +17,4 @@ public class AppSettings
     public double WindowTop { get; set; } = double.NaN;
     public double WindowWidth { get; set; } = 760;
     public double WindowHeight { get; set; } = 620;
-
-    // Feature 10: Theme
-    public string Theme { get; set; } = "Dark";
 }

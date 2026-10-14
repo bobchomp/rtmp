@@ -184,9 +184,6 @@ public class MainViewModel : INotifyPropertyChanged
     // Feature 5: Open recordings folder
     public RelayCommand OpenRecordingsFolderCommand { get; }
 
-    // Feature 10: Toggle theme
-    public RelayCommand ToggleThemeCommand { get; }
-
     // Go Live / End Live for a stream key
     public RelayCommand ToggleGoLiveCommand { get; }
 
@@ -248,16 +245,6 @@ public class MainViewModel : INotifyPropertyChanged
                 }
             },
             _ => !string.IsNullOrEmpty(Settings.RecordingPath) && Directory.Exists(Settings.RecordingPath));
-
-        // Feature 10: Toggle theme command
-        ToggleThemeCommand = new RelayCommand(_ =>
-        {
-            var newTheme = Settings.Theme == "Dark" ? "Light" : "Dark";
-            (System.Windows.Application.Current as App)?.ApplyTheme(newTheme);
-            Settings.Theme = newTheme;
-            _settingsService.Save();
-            OnPropertyChanged(nameof(Settings));
-        });
 
         ToggleGoLiveCommand = new RelayCommand(
             o =>

@@ -6,14 +6,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Feature 10: Theme dictionary — index 0, swapped at runtime -->
-                <ResourceDictionary Source="Themes/Dark.xaml"/>
+                <ResourceDictionary Source="Themes/Colours.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- ── Base button ──────────────────────────────────────────── -->
             <Style x:Key="BaseBtn" TargetType="Button">
-                <!-- White text: Accent/Danger backgrounds are dark in both themes -->
-                <Setter Property="Foreground" Value="White"/>
+                <!-- Dark text on the light purple background -->
+                <Setter Property="Foreground" Value="{DynamicResource TextPrim}"/>
                 <Setter Property="Background" Value="{DynamicResource Accent}"/>
                 <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Padding" Value="16,8"/>
@@ -42,6 +41,7 @@
 
             <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource BaseBtn}">
                 <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                <Setter Property="Foreground" Value="White"/>
             </Style>
 
             <Style x:Key="GhostBtn" TargetType="Button" BasedOn="{StaticResource BaseBtn}">
