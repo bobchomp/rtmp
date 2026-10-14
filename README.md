@@ -8,7 +8,7 @@ A Windows desktop application that runs its own RTMP server and projects incomin
 - **Stream key authentication** — only configured keys are accepted
 - **Fullscreen projection** onto any monitor you choose, with auto-detect when a stream connects
 - **Stream recording** to a local folder (per key, optional)
-- **Restream / forward** to any other RTMP endpoint such as Twitch or YouTube (requires FFmpeg in PATH)
+- **Go Live** — push any drone stream to YouTube, Facebook, Twitch or a custom RTMP(S) server with one button (FFmpeg is bundled)
 - **System tray** — runs quietly in the background, double-click to open the control panel
 - Dark-themed control panel UI
 
@@ -20,9 +20,8 @@ A Windows desktop application that runs its own RTMP server and projects incomin
 |---|---|
 | Windows 10 / 11 (x64) | Required |
 | .NET 8 SDK | For building — [download here](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| FFmpeg in PATH | Only required if you enable the **Restream** feature |
 
-No VLC installation needed — the VLC runtime is bundled via NuGet.
+No VLC installation needed — the VLC runtime is bundled via NuGet. Release builds also bundle MediaMTX and FFmpeg; a local dev build downloads FFmpeg to `%AppData%\RTMPProjector` the first time you press **Go Live** (or uses one on your PATH).
 
 ---
 
@@ -98,9 +97,10 @@ Place a `tray.ico` file at `src/Assets/tray.ico` before building to customise th
 └─────────────────────────────────────┘
 ```
 
-- **MediaMTX** handles all RTMP protocol details, stream key enforcement, recording, and restream delegation.
+- **MediaMTX** handles all RTMP protocol details, stream key enforcement and recording.
 - **StreamMonitorService** polls `http://localhost:9997/v3/paths/list` every 2 seconds to detect live streams.
 - **LibVLCSharp** opens `rtmp://localhost:1935/live/<key>` and renders it fullscreen using VLC's engine.
+- **RestreamService** (Go Live) runs `ffmpeg -i rtmp://localhost:1935/live/<key> -c copy -f flv <server>/<stream-key>` per stream key. No re-encoding; if the drone sends no audio a silent AAC track is added, because YouTube and Facebook expect one. While live, FFmpeg restarts automatically after drone drop-outs and network blips.
 
 ---
 

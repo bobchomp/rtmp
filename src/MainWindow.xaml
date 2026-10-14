@@ -285,7 +285,8 @@
                             </TextBlock>
 
                             <!-- Editor form -->
-                            <StackPanel DataContext="{Binding SelectedStreamKey}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel DataContext="{Binding SelectedStreamKey}" Margin="0,0,8,0">
                                 <StackPanel.Style>
                                     <Style TargetType="StackPanel">
                                         <Setter Property="Visibility" Value="Visible"/>
@@ -369,15 +370,98 @@
 
                                 <Separator/>
 
-                                <TextBlock Text="RESTREAM / FORWARD" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
-                                <CheckBox Content="Forward to another RTMP endpoint" IsChecked="{Binding RestreamEnabled}" Margin="0,0,0,8"/>
-                                <TextBlock Text="Destination URL" Style="{StaticResource FieldLabel}"/>
-                                <TextBox Text="{Binding RestreamUrl, UpdateSourceTrigger=PropertyChanged}"
-                                         IsEnabled="{Binding RestreamEnabled}"
-                                         FontFamily="Consolas" FontSize="12"
-                                         Margin="0,0,0,4"/>
-                                <TextBlock Text="e.g. rtmp://live.twitch.tv/app/YOUR_KEY"
-                                           Foreground="{DynamicResource TextMuted}" FontSize="11"/>
+                                <!-- GO LIVE ───────────────────────────────── -->
+                                <TextBlock Text="GO LIVE — YOUTUBE / FACEBOOK / TWITCH" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
+
+                                <!-- Destination fields are locked while live -->
+                                <StackPanel IsEnabled="{Binding IsLive, Converter={x:Static vm:NegateBoolConverter.Instance}}">
+                                    <TextBlock Text="Platform" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.RestreamPlatforms,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                              SelectedItem="{Binding RestreamPlatform}"
+                                              Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="Server URL" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding RestreamServer, UpdateSourceTrigger=PropertyChanged}"
+                                             IsReadOnly="{Binding IsCustomPlatform, Converter={x:Static vm:NegateBoolConverter.Instance}}"
+                                             FontFamily="Consolas" FontSize="12" Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="Stream Key" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding RestreamStreamKey, UpdateSourceTrigger=PropertyChanged}"
+                                             FontFamily="Consolas" FontSize="12" Margin="0,0,0,4"/>
+                                    <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,0,0,10">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="Paste the server URL and stream key from your streaming platform."/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="YouTube">
+                                                        <Setter Property="Text" Value="Find your stream key in YouTube Studio → Create → Go live → Stream."/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="Facebook">
+                                                        <Setter Property="Text" Value="Find your stream key in Facebook Live Producer → Streaming software."/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="Twitch">
+                                                        <Setter Property="Text" Value="Find your stream key in Twitch Creator Dashboard → Settings → Stream."/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <Button HorizontalAlignment="Left" Margin="0,0,0,6"
+                                        Command="{Binding DataContext.ToggleGoLiveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource BaseBtn}">
+                                            <Setter Property="Content" Value="● Go Live"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLive}" Value="True">
+                                                    <Setter Property="Content" Value="■ End Live Stream"/>
+                                                    <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
+                                <!-- Live status: Connecting… / ● LIVE on YouTube / errors -->
+                                <TextBlock Text="{Binding LiveStatus}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LiveStatus}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsLive}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Danger}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBlock Text="Start the server first, then press Go Live. If the drone isn't connected yet, it goes live as soon as it connects."
+                                           Foreground="{DynamicResource TextMuted}" FontSize="11" TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding DataContext.IsServerRunning,
+                                                            RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+                                                        <Condition Binding="{Binding IsLive}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
 
                                 <Separator/>
 
@@ -431,6 +515,7 @@
                                             RelativeSource={RelativeSource AncestorType=Window}}"
                                         HorizontalAlignment="Left"/>
                             </StackPanel>
+                            </ScrollViewer>
                         </Grid>
                     </Border>
                 </Grid>
@@ -515,66 +600,6 @@
                                           Margin="0,0,0,8"/>
                                 <CheckBox Content="Auto-start with Windows (minimised to tray)"
                                           IsChecked="{Binding Settings.AutoStartWithWindows}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <TextBlock Text="WEB STREAM" Style="{StaticResource SectionLabel}"/>
-
-                                <!-- Not yet configured -->
-                                <StackPanel x:Name="WebStreamSetupPanel">
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsWebStreamConfigured}" Value="False">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-                                    <TextBlock Text="Set up a Cloudflare Tunnel so your stream is accessible at your own domain — no port forwarding needed."
-                                               Foreground="{DynamicResource TextMuted}" FontSize="12"
-                                               TextWrapping="Wrap" Margin="0,0,0,12"/>
-                                    <Button Style="{StaticResource BaseBtn}" Content="Set Up Web Stream"
-                                            Click="SetupWebStream_Click"/>
-                                </StackPanel>
-
-                                <!-- Configured -->
-                                <StackPanel>
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsWebStreamConfigured}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-
-                                    <CheckBox Content="Enable web stream (starts tunnel with server)"
-                                              IsChecked="{Binding Settings.WebStreamEnabled}"
-                                              Margin="0,0,0,12"/>
-
-                                    <TextBlock Text="HLS Port" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox Text="{Binding Settings.HlsPort, UpdateSourceTrigger=PropertyChanged}"
-                                             Width="72" HorizontalAlignment="Left" Margin="0,0,0,8"/>
-
-                                    <TextBlock Text="Website Password (blank = public)" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox Text="{Binding Settings.WebStreamPassword, UpdateSourceTrigger=PropertyChanged}"
-                                             Margin="0,0,0,12"/>
-
-                                    <TextBlock Text="PLAYER URL" Style="{StaticResource SectionLabel}"/>
-                                    <TextBlock Text="{Binding PlayerUrl}"
-                                               FontFamily="Consolas" FontSize="11"
-                                               Foreground="{DynamicResource Accent}"
-                                               TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                                    <Button Style="{StaticResource GhostBtn}" Content="Reconfigure Tunnel"
-                                            Click="SetupWebStream_Click" HorizontalAlignment="Left"/>
-                                </StackPanel>
                             </StackPanel>
                         </Border>
 

@@ -20,8 +20,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly SettingsService _settingsService;
     private readonly MediaMtxService _mediaMtx;
     private readonly StreamMonitorService _monitor;
-    private readonly CloudflaredService _cloudflared;
-    private readonly WebPlayerService _webPlayer;
+    private readonly RestreamService _restream;
 
     // Active NDI senders — one per stream key with NdiEnabled=true
     private readonly Dictionary<string, NdiSenderService> _ndiSenders = [];
@@ -79,26 +78,7 @@ public class MainViewModel : INotifyPropertyChanged
     public string GetFullRtmpUrl(StreamKey key) =>
         $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
-    public bool IsWebStreamConfigured => Settings.TunnelConfigured;
-
-    public string PlayerUrl =>
-        string.IsNullOrWhiteSpace(Settings.PlayerHostname)
-            ? $"http://localhost:{Settings.PlayerPort}/"
-            : $"http://{Settings.PlayerHostname}/";
-
-    public string HlsBaseUrl
-    {
-        get
-        {
-            var baseUrl = string.IsNullOrWhiteSpace(Settings.PlayerHostname)
-                ? $"http://localhost:{Settings.PlayerPort}"
-                : $"http://{Settings.PlayerHostname}";
-            var first = StreamKeys.FirstOrDefault();
-            return first == null
-                ? $"{baseUrl}/live/[stream-key]/index.m3u8"
-                : $"{baseUrl}/live/{first.Key}/index.m3u8";
-        }
-    }
+    public IReadOnlyList<string> RestreamPlatforms => StreamKey.RestreamPlatforms;
 
     // ── Settings pass-throughs ────────────────────────────────────────────────
 
@@ -207,6 +187,9 @@ public class MainViewModel : INotifyPropertyChanged
     // Feature: Toggle recording for a stream key
     public RelayCommand ToggleRecordingCommand { get; }
 
+    // Go Live / End Live for a stream key
+    public RelayCommand ToggleGoLiveCommand { get; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     public event Action<StreamKey>? StreamBecameActive;
@@ -216,16 +199,13 @@ public class MainViewModel : INotifyPropertyChanged
     // ── Construction ──────────────────────────────────────────────────────────
 
     public MainViewModel(SettingsService settingsService, MediaMtxService mediaMtx,
-                         StreamMonitorService monitor, CloudflaredService cloudflared,
-                         WebPlayerService webPlayer)
+                         StreamMonitorService monitor)
     {
         _settingsService = settingsService;
         _mediaMtx = mediaMtx;
         _monitor = monitor;
-        _cloudflared = cloudflared;
-        _webPlayer = webPlayer;
-        _cloudflared.LogMessage += msg => UIInvoke(() => AppendLog(msg));
-        _webPlayer.LogMessage   += msg => UIInvoke(() => AppendLog(msg));
+        _restream = new RestreamService(UIInvoke);
+        _restream.LogMessage += msg => UIInvoke(() => AppendLog(msg));
 
         // Try to load NDI SDK runtime (non-fatal if absent)
         NdiLib.TryLoad();
@@ -290,6 +270,24 @@ public class MainViewModel : INotifyPropertyChanged
                 return key != null && IsServerRunning && !string.IsNullOrEmpty(Settings.RecordingPath);
             });
 
+        ToggleGoLiveCommand = new RelayCommand(
+            o =>
+            {
+                if (o is not StreamKey key) return;
+                if (key.IsLive)
+                {
+                    _restream.EndLive(key);
+                    StatusMessage = $"{key.Name}: live stream ended.";
+                }
+                else
+                {
+                    _settingsService.Save();   // remember the destination without restarting the server
+                    StatusMessage = $"{key.Name}: going live on {key.RestreamPlatform}…";
+                    _ = _restream.GoLiveAsync(key, BuildRtmpUrl(key));
+                }
+            },
+            o => o is StreamKey key && (key.IsLive || (IsServerRunning && key.HasRestreamDestination)));
+
         // Sync auto-start registry on launch (keeps registry up-to-date if exe moved)
         SetWindowsAutoStart(Settings.AutoStartWithWindows);
 
@@ -305,6 +303,8 @@ public class MainViewModel : INotifyPropertyChanged
             if (key.NdiEnabled)
                 StartNdiSender(key);
 
+            _restream.OnStreamStarted(key);
+
             StreamBecameActive?.Invoke(key);
         });
 
@@ -316,6 +316,7 @@ public class MainViewModel : INotifyPropertyChanged
                 : "Server stopped.";
 
             StopNdiSender(key.Id);
+            _restream.OnStreamStopped(key);
 
             StreamBecameInactive?.Invoke(key);
         });
@@ -387,19 +388,6 @@ public class MainViewModel : INotifyPropertyChanged
             await _mediaMtx.StartAsync();
             _monitor.Start(Settings);
 
-            if (Settings.WebStreamEnabled && Settings.TunnelConfigured)
-            {
-                try
-                {
-                    // Always rewrite tunnel.yml so config fixes are picked up without re-running the wizard
-                    _cloudflared.WriteConfig(Settings.TunnelId, Settings.TunnelHostname, Settings.HlsPort,
-                                             Settings.PlayerHostname, Settings.PlayerPort);
-                    _webPlayer.Start(Settings);
-                    await _cloudflared.StartAsync();
-                }
-                catch (Exception ex) { AppendLog($"Web stream start failed: {ex.Message}"); }
-            }
-
             IsServerRunning = true;
             StatusMessage = $"Server running — RTMP port {Settings.RtmpPort}";
         }
@@ -419,11 +407,17 @@ public class MainViewModel : INotifyPropertyChanged
         BusyText = "Stopping server...";
         try
         {
+            _restream.EndAll();
             _monitor.Stop();
             await _mediaMtx.StopAsync();
-            _webPlayer.Stop();
-            await _cloudflared.StopAsync();
             StopAllNdiSenders();
+
+            // The monitor doesn't fire "stopped" on shutdown — clear live indicators here
+            foreach (var key in StreamKeys)
+            {
+                key.IsActive = false;
+                key.BitrateKbps = 0;
+            }
             IsServerRunning = false;
             StatusMessage = "Server stopped.";
         }
@@ -454,6 +448,8 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public void EndAllLiveStreams() => _restream.EndAll();
+
     private void StopAllNdiSenders()
     {
         foreach (var s in _ndiSenders.Values) s.Dispose();
@@ -475,6 +471,7 @@ public class MainViewModel : INotifyPropertyChanged
     private void RemoveStreamKey(StreamKey? key)
     {
         if (key == null) return;
+        _restream.EndLive(key);
         StreamKeys.Remove(key);
         Settings.StreamKeys.Remove(key);
         if (SelectedStreamKey == key) SelectedStreamKey = StreamKeys.FirstOrDefault();
@@ -509,15 +506,6 @@ public class MainViewModel : INotifyPropertyChanged
 
     // ── Settings save ─────────────────────────────────────────────────────────
 
-    // Called from MainWindow after wizard completes (no stream-key sync needed)
-    public void SaveSettingsFromView()
-    {
-        _settingsService.Save();
-        OnPropertyChanged(nameof(HlsBaseUrl));
-        OnPropertyChanged(nameof(PlayerUrl));
-        OnPropertyChanged(nameof(IsWebStreamConfigured));
-    }
-
     private void SaveSettings()
     {
         // Sync editable fields from StreamKeys back to Settings
@@ -528,9 +516,6 @@ public class MainViewModel : INotifyPropertyChanged
         _settingsService.Save();
         StatusMessage = "Settings saved.";
         RefreshDiskSpace();
-        OnPropertyChanged(nameof(HlsBaseUrl));
-        OnPropertyChanged(nameof(PlayerUrl));
-        OnPropertyChanged(nameof(IsWebStreamConfigured));
 
         // Feature: Sync Windows auto-start registry entry
         SetWindowsAutoStart(Settings.AutoStartWithWindows);

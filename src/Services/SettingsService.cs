@@ -33,10 +33,30 @@ public class SettingsService
 
             var json = File.ReadAllText(SettingsFile);
             Settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            MigrateLegacyRestreamUrls();
         }
         catch
         {
             Settings = new AppSettings();
+        }
+    }
+
+    // Older versions stored one full "rtmp://server/app/KEY" URL — split it into
+    // a Custom server + stream key so it shows up in the new Go Live fields.
+    private void MigrateLegacyRestreamUrls()
+    {
+        foreach (var key in Settings.StreamKeys)
+        {
+            var url = key.RestreamUrl?.Trim();
+            key.RestreamUrl = null;
+            if (string.IsNullOrEmpty(url) || !string.IsNullOrEmpty(key.RestreamStreamKey)) continue;
+
+            var slash = url.LastIndexOf('/');
+            if (slash <= url.IndexOf("://", StringComparison.Ordinal) + 2) continue;
+
+            key.RestreamPlatform  = "Custom";
+            key.RestreamServer    = url[..slash];
+            key.RestreamStreamKey = url[(slash + 1)..];
         }
     }
 

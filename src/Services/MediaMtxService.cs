@@ -133,11 +133,7 @@ public class MediaMtxService : IAsyncDisposable
             rtmpAddress: :{settings.RtmpPort}
             rtmpEncryption: "no"
 
-            hls: {(settings.WebStreamEnabled ? "yes" : "no")}
-            hlsAddress: :{settings.HlsPort}
-            hlsAllowOrigins: ['*']
-            hlsSegmentCount: 3
-            hlsSegmentDuration: 2s
+            hls: no
             webrtc: no
             srt: no
 
@@ -164,14 +160,6 @@ public class MediaMtxService : IAsyncDisposable
                 lines.AppendLine($"    record: yes");
                 lines.AppendLine($"    recordPath: {recPath}");
                 lines.AppendLine($"    recordFormat: fmp4");
-            }
-
-            if (key.RestreamEnabled && !string.IsNullOrWhiteSpace(key.RestreamUrl))
-            {
-                // Invoke ffmpeg to forward the stream when it goes live
-                var restream = $"ffmpeg -re -i rtmp://localhost:{settings.RtmpPort}/{key.RtmpPath} -c copy -f flv {key.RestreamUrl}";
-                lines.AppendLine($"    runOnReady: {restream}");
-                lines.AppendLine($"    runOnReadyRestart: yes");
             }
         }
 

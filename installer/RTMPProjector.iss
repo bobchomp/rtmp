@@ -25,9 +25,9 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-; Close the running app (and any orphaned mediamtx.exe) before replacing files
+; Close the running app (and any orphaned mediamtx.exe / ffmpeg.exe) before replacing files
 CloseApplications=yes
-CloseApplicationsFilter={#MyAppExeName};mediamtx.exe
+CloseApplicationsFilter={#MyAppExeName};mediamtx.exe;ffmpeg.exe
 SetupIconFile=..\src\Assets\tray.ico
 
 [Languages]
