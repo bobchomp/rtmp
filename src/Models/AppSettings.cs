@@ -8,8 +8,6 @@ public class AppSettings
     public int ProjectionMonitorIndex { get; set; } = 1;
     public bool AutoProjectOnConnect { get; set; } = true;
     public string RecordingPath { get; set; } = "";
-    public bool StartMinimized { get; set; } = false;
-    public bool AutoStartServer { get; set; } = false;
 
     // Feature 7: First-run wizard
     public bool FirstRunCompleted { get; set; } = false;
@@ -22,7 +20,4 @@ public class AppSettings
 
     // Feature 10: Theme
     public string Theme { get; set; } = "Dark";
-
-    // Feature: Auto-start with Windows
-    public bool AutoStartWithWindows { get; set; } = false;
 }

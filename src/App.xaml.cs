@@ -126,11 +126,7 @@ public partial class App : Application
         StartUpdater();
         BuildTrayIcon();
 
-        if (_settingsService.Settings.AutoStartServer)
-            _ = _viewModel.StartServerAsync();
-
-        if (!_settingsService.Settings.StartMinimized)
-            _mainWindow.Show();
+        _mainWindow.Show();
     }
 
     // Feature 10: Theme switching

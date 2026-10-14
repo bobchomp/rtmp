@@ -277,8 +277,7 @@ public class MainViewModel : INotifyPropertyChanged
             },
             o => o is StreamKey key && (key.IsLive || (IsServerRunning && key.HasRestreamDestination)));
 
-        // Sync auto-start registry on launch (keeps registry up-to-date if exe moved)
-        SetWindowsAutoStart(Settings.AutoStartWithWindows);
+        RemoveLegacyWindowsAutoStart();
 
         _mediaMtx.LogMessage += msg => UIInvoke(() => AppendLog(msg));
         _monitor.LogMessage  += msg => UIInvoke(() => AppendLog(msg));
@@ -582,9 +581,6 @@ public class MainViewModel : INotifyPropertyChanged
         StatusMessage = "Settings saved.";
         RefreshDiskSpace();
 
-        // Feature: Sync Windows auto-start registry entry
-        SetWindowsAutoStart(Settings.AutoStartWithWindows);
-
         _ = ApplyServerConfigAsync();
     }
 
@@ -596,21 +592,18 @@ public class MainViewModel : INotifyPropertyChanged
         return null;
     }
 
-    // Feature: Windows auto-start via registry
-    private static void SetWindowsAutoStart(bool enable)
+    // Older versions had a "Start with Windows" option. It was removed, so clear any
+    // Run entry it left behind — otherwise the app would keep auto-starting with no
+    // setting left to turn it off.
+    private static void RemoveLegacyWindowsAutoStart()
     {
-        const string regPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Registry.CurrentUser.OpenSubKey(regPath, writable: true);
-        if (key == null) return;
-        if (enable)
+        try
         {
-            var exe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-            key.SetValue("RTMPProjector", $"\"{exe}\"");
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            key?.DeleteValue("RTMPProjector", throwOnMissingValue: false);
         }
-        else
-        {
-            key.DeleteValue("RTMPProjector", throwOnMissingValue: false);
-        }
+        catch { /* non-fatal */ }
     }
 
     // Feature 8: Save window bounds

@@ -121,9 +121,6 @@ Everything is editable in the app; the file is only listed here for reference. I
 | `ProjectionMonitorIndex` | 1 | 0-based monitor index for projection (falls back to the first monitor if missing) |
 | `AutoProjectOnConnect` | true | Open the projection window automatically |
 | `RecordingPath` | `%AppData%\RTMPProjector\Recordings` | Root folder for recordings |
-| `StartMinimized` | false | Start in the tray without showing the window |
-| `AutoStartServer` | false | Start the RTMP server on launch |
-| `AutoStartWithWindows` | false | Launch when Windows starts |
 | `Theme` | `Dark` | `Dark` or `Light` |
 
 ---

@@ -574,20 +574,6 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <TextBlock Text="STARTUP" Style="{StaticResource SectionLabel}"/>
-                                <CheckBox Content="Start minimised to system tray"
-                                          IsChecked="{Binding Settings.StartMinimized}"
-                                          Margin="0,0,0,8"/>
-                                <CheckBox Content="Automatically start the RTMP server on launch"
-                                          IsChecked="{Binding Settings.AutoStartServer}"
-                                          Margin="0,0,0,8"/>
-                                <CheckBox Content="Start automatically when Windows starts"
-                                          IsChecked="{Binding Settings.AutoStartWithWindows}"/>
-                            </StackPanel>
-                        </Border>
-
                         <StackPanel Orientation="Horizontal">
                             <Button Style="{StaticResource BaseBtn}" Content="Save Settings"
                                     Command="{Binding SaveSettingsCommand}"/>
