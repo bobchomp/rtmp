@@ -315,7 +315,7 @@ public partial class App : Application
         RebuildTrayMenu();
     }
 
-    private async void InstallUpdate()
+    private void InstallUpdate()
     {
         if (_updater == null || _downloadedAssetPath == null || _updateStatus != UpdateStatus.Ready) return;
 
@@ -333,9 +333,9 @@ public partial class App : Application
             return;
         }
 
-        // Give the installer a moment to start, then shut down properly (ends live
-        // streams, stops the server) so it can replace our files
-        await Task.Delay(1500);
+        // Shut down properly straight away (ends live streams, stops the server) so the
+        // installer can replace our files — IsExiting is set before anything else, so
+        // the installer's own close request won't trigger the "Minimise or Quit?" prompt
         ExitApplication();
     }
 

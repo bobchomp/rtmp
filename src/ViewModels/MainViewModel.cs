@@ -383,7 +383,19 @@ public class MainViewModel : INotifyPropertyChanged
         try
         {
             if (await _mediaMtx.ApplyConfigAsync(Settings))
-                _monitor.Start(Settings);   // ports changed — poll the new API port
+            {
+                // Ports changed: the restart dropped every publisher. Mark them stopped now —
+                // the fresh monitor only reports streams that reconnect on the new port.
+                foreach (var key in StreamKeys.Where(k => k.IsActive).ToList())
+                {
+                    key.IsActive = false;
+                    key.BitrateKbps = 0;
+                    StopNdiSender(key.Id);
+                    _restream.OnStreamStopped(key);
+                    StreamBecameInactive?.Invoke(key);
+                }
+                _monitor.Start(Settings);   // poll the new API port
+            }
         }
         catch (Exception ex)
         {

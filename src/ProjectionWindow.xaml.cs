@@ -204,8 +204,19 @@ public partial class ProjectionWindow : Window
         StreamNameLabel.Text = $"LIVE  ·  {key.Name}";
         WaitingUrlLabel.Text = rtmpUrl;
         WaitingPanel.Visibility = Visibility.Visible;
-        _isSwitching = true;
-        _player?.Stop(); // Stopped handler fires BeginPlay() when _isSwitching is true
+        // If something is playing, stop it and let the Stopped handler start the new stream.
+        // VLC raises no Stopped event when already stopped (e.g. waiting for a reconnect),
+        // so in that case start the new stream directly.
+        if (_player?.State is VLCState.Playing or VLCState.Opening or VLCState.Buffering or VLCState.Paused)
+        {
+            _isSwitching = true;
+            _player.Stop();
+        }
+        else
+        {
+            _isSwitching = false;
+            BeginPlay();
+        }
     }
 
     private void CycleStream()
