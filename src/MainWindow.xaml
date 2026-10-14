@@ -357,19 +357,12 @@
                                 <Separator/>
 
                                 <!-- GO LIVE ───────────────────────────────── -->
-                                <TextBlock Text="GO LIVE — YOUTUBE / FACEBOOK / TWITCH" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
+                                <TextBlock Text="GO LIVE (RTMP)" Style="{StaticResource SectionLabel}" Margin="0,4,0,6"/>
 
                                 <!-- Destination fields are locked while live -->
                                 <StackPanel IsEnabled="{Binding IsLive, Converter={x:Static vm:NegateBoolConverter.Instance}}">
-                                    <TextBlock Text="Platform" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox ItemsSource="{Binding DataContext.RestreamPlatforms,
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                              SelectedItem="{Binding RestreamPlatform}"
-                                              Margin="0,0,0,8"/>
-
                                     <TextBlock Text="Server URL" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Text="{Binding RestreamServer, UpdateSourceTrigger=PropertyChanged}"
-                                             IsReadOnly="{Binding IsCustomPlatform, Converter={x:Static vm:NegateBoolConverter.Instance}}"
                                              FontFamily="Consolas" FontSize="12" Margin="0,0,0,8"/>
 
                                     <TextBlock Text="Stream Key" Style="{StaticResource FieldLabel}"/>
@@ -402,22 +395,10 @@
                                     </Grid>
                                     <TextBlock Foreground="{DynamicResource TextMuted}" FontSize="11"
                                                TextWrapping="Wrap" Margin="0,0,0,10">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="Paste the server URL and stream key from your streaming platform."/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="YouTube">
-                                                        <Setter Property="Text" Value="Find your stream key in YouTube Studio → Create → Go live → Stream."/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="Facebook">
-                                                        <Setter Property="Text" Value="Find your stream key in Facebook Live Producer → Streaming software."/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding RestreamPlatform}" Value="Twitch">
-                                                        <Setter Property="Text" Value="Find your stream key in Twitch Creator Dashboard → Settings → Stream."/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
+                                        Copy both from your platform's live-streaming settings. Common server URLs:<LineBreak/>
+                                        YouTube <Run FontFamily="Consolas">rtmp://a.rtmp.youtube.com/live2</Run><LineBreak/>
+                                        Facebook <Run FontFamily="Consolas">rtmps://live-api-s.facebook.com:443/rtmp/</Run><LineBreak/>
+                                        Twitch <Run FontFamily="Consolas">rtmp://live.twitch.tv/app</Run>
                                     </TextBlock>
                                 </StackPanel>
 

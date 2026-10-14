@@ -83,8 +83,6 @@ public class MainViewModel : INotifyPropertyChanged
     public string GetFullRtmpUrl(StreamKey key) =>
         $"rtmp://{LocalIpAddress}:{Settings.RtmpPort}/live/{key.Key}";
 
-    public IReadOnlyList<string> RestreamPlatforms => StreamKey.RestreamPlatforms;
-
     // ── Settings pass-throughs ────────────────────────────────────────────────
 
     public AppSettings Settings => _settingsService.Settings;
@@ -273,7 +271,7 @@ public class MainViewModel : INotifyPropertyChanged
                 else
                 {
                     _settingsService.Save();   // remember the destination without restarting the server
-                    StatusMessage = $"{key.Name}: going live on {key.RestreamPlatform}…";
+                    StatusMessage = $"{key.Name}: going live on {key.RestreamDisplayName}…";
                     _ = _restream.GoLiveAsync(key, BuildRtmpUrl(key));
                 }
             },
