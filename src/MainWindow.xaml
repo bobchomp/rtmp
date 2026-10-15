@@ -74,8 +74,10 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Server toggle + minimize + theme toggle -->
+                <!-- Check for updates + server toggle + minimise -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource GhostBtn}" Content="Check for Updates"
+                            Margin="0,0,8,0" Click="CheckForUpdates_Click"/>
                     <Button Style="{StaticResource BaseBtn}"
                             Command="{Binding ToggleServerCommand}"
                             IsEnabled="{Binding IsBusy, Converter={x:Static vm:NegateBoolConverter.Instance}}">
