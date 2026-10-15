@@ -1,0 +1,33 @@
+name: Build
+
+# Compiles the app on a Windows runner for every pull request and every push to
+# main, so a broken change is caught before it reaches a release.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build (Release, win-x64)
+        run: dotnet build src/RTMPProjector.csproj -c Release -r win-x64
